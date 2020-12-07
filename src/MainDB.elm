@@ -10,6 +10,7 @@ import Http
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (required)
 import Ports exposing (storeQuery)
+import SearchOptions
 import String
 import Url exposing (baseUrl)
 
@@ -19,7 +20,11 @@ type alias Flags =
 
 
 type alias Model =
-    { query : String, results : List Movie, errorMessage : Maybe String }
+    { query : String
+    , results : List Movie
+    , errorMessage : Maybe String
+    , searchOptions : SearchOptions.Options
+    }
 
 
 type alias Movie =
@@ -35,6 +40,7 @@ type Msg
     | DeleteById Int
     | Search
     | HandleSearchResults (Result Http.Error (List Movie))
+    | Options SearchOptions.Msg
 
 
 initialModel : Model
@@ -42,6 +48,7 @@ initialModel =
     { query = "Gentlemen"
     , results = []
     , errorMessage = Nothing
+    , searchOptions = SearchOptions.initialModel
     }
 
 
@@ -109,6 +116,13 @@ update msg model =
                 Ok results ->
                     ( { model | results = results, errorMessage = Nothing }, Cmd.none )
 
+        Options searchOptionsMsg ->
+            let
+                ( searchOptions, cmd ) =
+                    SearchOptions.update searchOptionsMsg model.searchOptions
+            in
+            ( { model | searchOptions = searchOptions }, Cmd.map Options cmd )
+
 
 view : Model -> Html Msg
 view model =
@@ -119,6 +133,7 @@ view model =
             ]
         , input [ class "search-query", onInput SetQuery, value model.query, onEnter Search ] []
         , button [ class "search-button", onClick Search ] [ text "Search" ]
+        , Html.map Options (SearchOptions.view model.searchOptions)
         , viewErrorMessage model.errorMessage
         , Html.Keyed.node "ul" [ class "results" ] (List.map viewSearchResult model.results)
         ]
