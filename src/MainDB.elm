@@ -1,7 +1,6 @@
 module MainDB exposing (..)
 
 import Auth exposing (apiToken)
-import Debug
 import Html exposing (Html, button, div, h1, header, input, li, span, text, ul)
 import Html.Attributes exposing (class, value)
 import Html.Events exposing (keyCode, on, onClick, onInput)
@@ -10,7 +9,7 @@ import Http
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (required)
 import Ports exposing (storeQuery)
-import SearchOptions
+import SearchOptions exposing (updateOptions)
 import String
 import Url exposing (baseUrl)
 
@@ -28,7 +27,10 @@ type alias Model =
 
 
 type alias Movie =
-    { id : Int, title : String, rate : Float }
+    { id : Int
+    , title : String
+    , rate : Float
+    }
 
 
 type alias MovieError =
@@ -117,11 +119,7 @@ update msg model =
                     ( { model | results = results, errorMessage = Nothing }, Cmd.none )
 
         Options searchOptionsMsg ->
-            let
-                ( searchOptions, cmd ) =
-                    SearchOptions.update searchOptionsMsg model.searchOptions
-            in
-            ( { model | searchOptions = searchOptions }, Cmd.map Options cmd )
+            ( { model | searchOptions = updateOptions searchOptionsMsg model.searchOptions }, Cmd.none )
 
 
 view : Model -> Html Msg
