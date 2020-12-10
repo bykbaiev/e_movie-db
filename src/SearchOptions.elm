@@ -73,9 +73,9 @@ onBlurWithTargetValue toMsg =
     on "blur" (Json.Decode.map toMsg targetValue)
 
 
-onChange : (String -> Maybe String) -> (Maybe String -> msg) -> Html.Attribute msg
-onChange converter toMsg =
-    on "change" (Json.Decode.map (\s -> toMsg <| converter s) targetValue)
+onChange : (String -> msg) -> Html.Attribute msg
+onChange toMsg =
+    on "change" (Json.Decode.map toMsg targetValue)
 
 
 stringToLanguage : String -> Maybe String
@@ -107,11 +107,11 @@ viewOption selectOption =
     option [ value selectOption.value ] [ text selectOption.text ]
 
 
-viewSelect : List { value : String, text : String } -> String -> String -> (String -> Maybe String) -> (Maybe String -> msg) -> Html msg
-viewSelect options labelText selectedValue converter msg =
+viewSelect : List { value : String, text : String } -> String -> String -> (String -> msg) -> Html msg
+viewSelect options labelText selectedValue selectOpt =
     div [ class "search-option" ]
         [ label [ class "top-label" ] [ text labelText ]
-        , select [ onChange converter msg, value selectedValue ]
+        , select [ onChange selectOpt, value selectedValue ]
             (List.map viewOption options)
         ]
 
@@ -126,8 +126,7 @@ view options =
             ]
             "Language"
             (Maybe.withDefault "" options.language)
-            stringToLanguage
-            SetLanguage
+            (SetLanguage << stringToLanguage)
         , viewSelect
             [ { value = "", text = "None" }
             , { value = "GB", text = "United Kingdom" }
@@ -136,8 +135,7 @@ view options =
             ]
             "Region"
             (Maybe.withDefault "" options.region)
-            stringToRegion
-            SetRegion
+            (SetRegion << stringToRegion)
 
         -- , div [ class "search-option" ]
         --     [ label [ class "top-label" ] [ text "Year" ]
