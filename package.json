@@ -1,0 +1,28 @@
+{
+  "name": "movie-db",
+  "version": "1.0.0",
+  "description": "To start the application in the dev mode pls run the following command: ```bash elm-live src/Main.elm --open -- --output=elm.js ```",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bykbaiev/e_movie-db.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bykbaiev/e_movie-db/issues"
+  },
+  "homepage": "https://github.com/bykbaiev/e_movie-db#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "elm-webpack-loader": "^7.0.1",
+    "file-loader": "^6.2.0",
+    "loader-utils": "^2.0.0",
+    "webpack": "^5.10.0",
+    "webpack-cli": "^4.2.0",
+    "webpack-dev-server": "^3.11.0"
+  }
+}
