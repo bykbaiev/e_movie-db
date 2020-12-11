@@ -1,9 +1,10 @@
 module MainDB exposing (..)
 
-import Html exposing (Html, button, div, h1, header, input, li, span, text, ul)
+import Html exposing (Html, button, div, h1, header, input, li, span, text)
 import Html.Attributes exposing (class, value)
 import Html.Events exposing (keyCode, on, onClick, onInput)
 import Html.Keyed
+import Html.Lazy exposing (lazy)
 import Http
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (required)
@@ -135,9 +136,9 @@ view model =
             ]
         , input [ class "search-query", onInput SetQuery, value model.query, onEnter Search ] []
         , button [ class "search-button", onClick Search ] [ text "Search" ]
-        , Html.map Options (SearchOptions.view model.searchOptions)
+        , Html.map Options (lazy SearchOptions.view model.searchOptions)
         , viewErrorMessage model.errorMessage
-        , Html.Keyed.node "ul" [ class "results" ] (List.map viewSearchResult model.results)
+        , Html.Keyed.node "ul" [ class "results" ] (List.map viewKeyedSearchResult model.results)
         ]
 
 
@@ -151,17 +152,20 @@ viewErrorMessage errorMessage =
             text ""
 
 
-viewSearchResult : Movie -> ( String, Html Msg )
-viewSearchResult movie =
+viewKeyedSearchResult : Movie -> ( String, Html Msg )
+viewKeyedSearchResult movie =
     ( String.fromInt movie.id
-    , li []
+    , lazy viewSearchResult movie
+    )
+
+viewSearchResult : Movie -> Html Msg
+viewSearchResult movie =
+    li []
         [ span [ class "star-count" ] [ text (String.fromFloat movie.rate) ]
         , span [ class "title" ] [ text movie.title ]
         , button [ class "hide-movie", onClick (DeleteById movie.id) ]
             [ text "X" ]
         ]
-    )
-
 
 onEnter : Msg -> Html.Attribute Msg
 onEnter msg =
