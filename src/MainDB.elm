@@ -1,6 +1,5 @@
 module MainDB exposing (..)
 
-import Auth exposing (apiToken)
 import Html exposing (Html, button, div, h1, header, input, li, span, text, ul)
 import Html.Attributes exposing (class, value)
 import Html.Events exposing (keyCode, on, onClick, onInput)
@@ -15,13 +14,16 @@ import Url exposing (baseUrl)
 
 
 type alias Flags =
-    Maybe String
+    { query : Maybe String
+    , apiToken : Maybe String
+    }
 
 
 type alias Model =
     { query : String
     , results : List Movie
     , errorMessage : Maybe String
+    , apiToken : Maybe String
     , searchOptions : SearchOptions.Options
     }
 
@@ -50,29 +52,31 @@ initialModel =
     { query = "Gentlemen"
     , results = []
     , errorMessage = Nothing
+    , apiToken = Nothing
     , searchOptions = SearchOptions.initialModel
     }
 
 
 init : Flags -> ( Model, Cmd Msg )
-init initialQuery =
+init { query, apiToken } =
     let
-        query =
-            case initialQuery of
-                Just nonEmptyQuery ->
-                    if nonEmptyQuery /= "" then
-                        nonEmptyQuery
+        initialQuery =
+            query
+                |> Maybe.map
+                    (\v ->
+                        if v == "" then
+                            initialModel.query
 
-                    else
-                        initialModel.query
-
-                Nothing ->
-                    initialModel.query
+                        else
+                            v
+                    )
+                |> Maybe.withDefault initialModel.query
     in
     ( { initialModel
-        | query = query
+        | query = initialQuery
+        , apiToken = apiToken
       }
-    , searchMovies query
+    , searchMovies initialQuery apiToken
     )
 
 
@@ -84,7 +88,7 @@ update msg model =
                 ( { model | errorMessage = Just "Search query cannot be empty" }, Cmd.none )
 
             else
-                ( { model | errorMessage = Nothing }, searchMovies model.query )
+                ( { model | errorMessage = Nothing }, searchMovies model.query model.apiToken )
 
         SetQuery query ->
             ( { model | query = query }, storeQuery query )
@@ -172,17 +176,27 @@ onEnter msg =
     on "keydown" (Json.Decode.andThen isEnter keyCode)
 
 
-searchMovies : String -> Cmd Msg
-searchMovies query =
+searchMovies : String -> Maybe String -> Cmd Msg
+searchMovies query token =
     let
+        isEmptyToken =
+            Maybe.withDefault "" token == ""
+
         url =
-            baseUrl
-                ++ "search/movie?api_key="
-                ++ apiToken
-                ++ "&query="
-                ++ query
-                ++ "&language=en-US&page=1"
+            if isEmptyToken then
+                ""
+
+            else
+                baseUrl
+                    ++ "search/movie?api_key="
+                    ++ Maybe.withDefault "" token
+                    ++ "&query="
+                    ++ query
+                    ++ "&language=en-US&page=1"
     in
+    -- if isEmptyToken then
+    --     Cmd. HandleSearchResults (Err (Http.BadUrl "There is no API token"))
+    -- else
     Http.get
         { url = url
         , expect = Http.expectJson HandleSearchResults searchMoviesDecoder
