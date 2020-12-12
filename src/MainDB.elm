@@ -1,10 +1,10 @@
 module MainDB exposing (..)
 
-import Html exposing (Html, button, div, h1, header, input, li, span, text)
-import Html.Attributes exposing (class, value)
-import Html.Events exposing (keyCode, on, onClick, onInput)
-import Html.Keyed
-import Html.Lazy exposing (lazy)
+import Html.Styled exposing (Html, button, div, h1, header, input, li, span, text)
+import Html.Styled.Attributes exposing (class, value)
+import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
+import Html.Styled.Keyed
+import Html.Styled.Lazy exposing (lazy)
 import Http
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (required)
@@ -136,9 +136,9 @@ view model =
             ]
         , input [ class "search-query", onInput SetQuery, value model.query, onEnter Search ] []
         , button [ class "search-button", onClick Search ] [ text "Search" ]
-        , Html.map Options (lazy SearchOptions.view model.searchOptions)
+        , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
         , viewErrorMessage model.errorMessage
-        , Html.Keyed.node "ul" [ class "results" ] (List.map viewKeyedSearchResult model.results)
+        , Html.Styled.Keyed.node "ul" [ class "results" ] (List.map viewKeyedSearchResult model.results)
         ]
 
 
@@ -158,6 +158,7 @@ viewKeyedSearchResult movie =
     , lazy viewSearchResult movie
     )
 
+
 viewSearchResult : Movie -> Html Msg
 viewSearchResult movie =
     li []
@@ -167,7 +168,8 @@ viewSearchResult movie =
             [ text "X" ]
         ]
 
-onEnter : Msg -> Html.Attribute Msg
+
+onEnter : Msg -> Html.Styled.Attribute Msg
 onEnter msg =
     let
         isEnter code =

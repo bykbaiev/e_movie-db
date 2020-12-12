@@ -1,8 +1,8 @@
 module SearchOptions exposing (..)
 
-import Html exposing (Html, div, input, label, option, select, text)
-import Html.Attributes exposing (class, type_, value)
-import Html.Events exposing (on, targetValue)
+import Html.Styled exposing (..)
+import Html.Styled.Attributes exposing (class, type_, value)
+import Html.Styled.Events exposing (on, targetValue)
 import Json.Decode
 import Regex exposing (Regex)
 
@@ -68,12 +68,12 @@ updateOptions msg options =
             { options | primaryReleaseYear = primaryReleaseYear }
 
 
-onBlurWithTargetValue : (String -> msg) -> Html.Attribute msg
+onBlurWithTargetValue : (String -> msg) -> Attribute msg
 onBlurWithTargetValue toMsg =
     on "blur" (Json.Decode.map toMsg targetValue)
 
 
-onChange : (String -> msg) -> Html.Attribute msg
+onChange : (String -> msg) -> Attribute msg
 onChange toMsg =
     on "change" (Json.Decode.map toMsg targetValue)
 
