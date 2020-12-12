@@ -77,7 +77,7 @@ init { query, apiToken } =
         | query = initialQuery
         , apiToken = apiToken
       }
-    , searchMovies initialQuery apiToken
+    , searchMovies initialQuery apiToken initialModel.searchOptions
     )
 
 
@@ -89,7 +89,7 @@ update msg model =
                 ( { model | errorMessage = Just "Search query cannot be empty" }, Cmd.none )
 
             else
-                ( { model | errorMessage = Nothing }, searchMovies model.query model.apiToken )
+                ( { model | errorMessage = Nothing }, searchMovies model.query model.apiToken model.searchOptions )
 
         SetQuery query ->
             ( { model | query = query }, storeQuery query )
@@ -124,7 +124,13 @@ update msg model =
                     ( { model | results = results, errorMessage = Nothing }, Cmd.none )
 
         Options searchOptionsMsg ->
-            ( { model | searchOptions = updateOptions searchOptionsMsg model.searchOptions }, Cmd.none )
+            let
+                searchOptions =
+                    updateOptions searchOptionsMsg model.searchOptions
+            in
+            ( { model | searchOptions = searchOptions }
+            , searchMovies model.query model.apiToken searchOptions
+            )
 
 
 view : Model -> Html Msg
@@ -182,11 +188,36 @@ onEnter msg =
     on "keydown" (Json.Decode.andThen isEnter keyCode)
 
 
-searchMovies : String -> Maybe String -> Cmd Msg
-searchMovies query token =
+searchMovies : String -> Maybe String -> SearchOptions.Options -> Cmd Msg
+searchMovies query token options =
     let
         isEmptyToken =
             Maybe.withDefault "" token == ""
+
+        regionQuery =
+            case options.region of
+                Just region ->
+                    "&region=" ++ region
+
+                Nothing ->
+                    ""
+
+        languageQuery =
+            case options.language of
+                Just language ->
+                    "&language=" ++ language
+
+                Nothing ->
+                    ""
+
+        includeAdultQuery =
+            "&include_adult="
+                ++ (if options.includeAdult then
+                        "true"
+
+                    else
+                        "false"
+                   )
 
         url =
             if isEmptyToken then
@@ -198,7 +229,10 @@ searchMovies query token =
                     ++ Maybe.withDefault "" token
                     ++ "&query="
                     ++ query
-                    ++ "&language=en-US&page=1"
+                    ++ regionQuery
+                    ++ languageQuery
+                    ++ includeAdultQuery
+                    ++ "&page=1"
     in
     -- if isEmptyToken then
     --     Cmd. HandleSearchResults (Err (Http.BadUrl "There is no API token"))
