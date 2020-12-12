@@ -1,8 +1,9 @@
 module SearchOptions exposing (..)
 
+import Css exposing (..)
 import Html.Styled exposing (..)
-import Html.Styled.Attributes exposing (class, type_, value)
-import Html.Styled.Events exposing (on, targetValue)
+import Html.Styled.Attributes exposing (class, css, selected, type_, value)
+import Html.Styled.Events exposing (on, onClick, targetValue)
 import Json.Decode
 import Regex exposing (Regex)
 
@@ -17,8 +18,14 @@ regions =
     [ "US", "GB", "DE" ]
 
 
+emptyOptionValue : String
+emptyOptionValue =
+    "none"
+
+
 type alias Options =
-    { language : Maybe String
+    { opened : Bool
+    , language : Maybe String
     , includeAdult : Bool
     , region : Maybe String
     , year : Maybe Int
@@ -27,7 +34,8 @@ type alias Options =
 
 
 type Msg
-    = SetLanguage (Maybe String)
+    = SetOpened Bool
+    | SetLanguage (Maybe String)
     | SetIncludeAdult Bool
     | SetRegion (Maybe String)
     | SetYear (Maybe Int)
@@ -36,7 +44,8 @@ type Msg
 
 initialModel : Options
 initialModel =
-    { language = Nothing
+    { opened = False
+    , language = Nothing
     , includeAdult = False
     , region = Nothing
     , year = Nothing
@@ -52,6 +61,9 @@ yearRegex =
 updateOptions : Msg -> Options -> Options
 updateOptions msg options =
     case msg of
+        SetOpened opened ->
+            { options | opened = opened }
+
         SetLanguage language ->
             { options | language = language }
 
@@ -102,40 +114,92 @@ type alias SelectOption =
     }
 
 
-viewOption : SelectOption -> Html msg
-viewOption selectOption =
-    option [ value selectOption.value ] [ text selectOption.text ]
+viewOption : String -> SelectOption -> Html msg
+viewOption selectedValue selectOption =
+    option
+        [ selected (selectedValue == selectOption.value)
+        , value selectOption.value
+        ]
+        [ text selectOption.text ]
 
 
 viewSelect : List { value : String, text : String } -> String -> String -> (String -> msg) -> Html msg
 viewSelect options labelText selectedValue selectOpt =
     div [ class "search-option" ]
-        [ label [ class "top-label" ] [ text labelText ]
+        [ label
+            [ css
+                [ display block
+                , marginBottom (px 8)
+                , fontSize (px 14)
+                , fontWeight (int 500)
+                ]
+            ]
+            [ text labelText ]
         , select [ onChange selectOpt, value selectedValue ]
-            (List.map viewOption options)
+            (List.map (viewOption selectedValue) options)
         ]
 
 
 view : Options -> Html Msg
 view options =
-    div [ class "search-options" ]
-        [ viewSelect
-            [ { value = "", text = "None" }
-            , { value = "en", text = "English" }
-            , { value = "de", text = "German" }
+    let
+        optionsContainer =
+            if options.opened then
+                viewOptions options
+
+            else
+                text ""
+    in
+    div []
+        [ div
+            [ css
+                [ displayFlex
+                , justifyContent spaceBetween
+                , alignItems center
+                ]
             ]
-            "Language"
-            (Maybe.withDefault "" options.language)
-            (SetLanguage << stringToLanguage)
-        , viewSelect
-            [ { value = "", text = "None" }
-            , { value = "GB", text = "United Kingdom" }
-            , { value = "US", text = "United States" }
-            , { value = "DE", text = "Germany" }
+            [ p [] [ text "Additional options" ]
+            , button [ onClick <| SetOpened (not options.opened) ] [ text "Toggle additional options" ]
             ]
-            "Region"
-            (Maybe.withDefault "" options.region)
-            (SetRegion << stringToRegion)
+        , optionsContainer
+        ]
+
+
+optionsItemStyle : List Style
+optionsItemStyle =
+    [ marginRight (px 8) ]
+
+
+viewOptions : Options -> Html Msg
+viewOptions options =
+    div
+        [ css
+            [ displayFlex
+            , alignItems center
+            , padding2 (px 8) zero
+            ]
+        ]
+        [ div [ css optionsItemStyle ]
+            [ viewSelect
+                [ { value = emptyOptionValue, text = "None" }
+                , { value = "en", text = "English" }
+                , { value = "de", text = "German" }
+                ]
+                "Language"
+                (Maybe.withDefault emptyOptionValue options.language)
+                (SetLanguage << stringToLanguage)
+            ]
+        , div [ css optionsItemStyle ]
+            [ viewSelect
+                [ { value = emptyOptionValue, text = "None" }
+                , { value = "GB", text = "United Kingdom" }
+                , { value = "US", text = "United States" }
+                , { value = "DE", text = "Germany" }
+                ]
+                "Region"
+                (Maybe.withDefault emptyOptionValue options.region)
+                (SetRegion << stringToRegion)
+            ]
 
         -- , div [ class "search-option" ]
         --     [ label [ class "top-label" ] [ text "Year" ]
