@@ -1,6 +1,7 @@
 module SearchOptions exposing (..)
 
 import Css exposing (..)
+import Html.Attributes exposing (style)
 import Html.Styled exposing (..)
 import Html.Styled.Attributes exposing (class, css, selected, type_, value)
 import Html.Styled.Events exposing (on, onClick, targetValue)
@@ -23,6 +24,15 @@ emptyOptionValue =
     "none"
 
 
+labelStyles : List Style
+labelStyles =
+    [ display block
+    , marginBottom (px 8)
+    , fontSize (px 14)
+    , fontWeight (int 500)
+    ]
+
+
 type alias Options =
     { opened : Bool
     , language : Maybe String
@@ -36,7 +46,7 @@ type alias Options =
 type Msg
     = SetOpened Bool
     | SetLanguage (Maybe String)
-    | SetIncludeAdult Bool
+    | ToggleIncludeAdult
     | SetRegion (Maybe String)
     | SetYear (Maybe Int)
     | SetPrimaryReleaseYear (Maybe Int)
@@ -67,8 +77,8 @@ updateOptions msg options =
         SetLanguage language ->
             { options | language = language }
 
-        SetIncludeAdult includeAdult ->
-            { options | includeAdult = includeAdult }
+        ToggleIncludeAdult ->
+            { options | includeAdult = not options.includeAdult }
 
         SetRegion region ->
             { options | region = region }
@@ -126,15 +136,7 @@ viewOption selectedValue selectOption =
 viewSelect : List { value : String, text : String } -> String -> String -> (String -> msg) -> Html msg
 viewSelect options labelText selectedValue selectOpt =
     div [ class "search-option" ]
-        [ label
-            [ css
-                [ display block
-                , marginBottom (px 8)
-                , fontSize (px 14)
-                , fontWeight (int 500)
-                ]
-            ]
-            [ text labelText ]
+        [ label [ css labelStyles ] [ text labelText ]
         , select [ onChange selectOpt, value selectedValue ]
             (List.map (viewOption selectedValue) options)
         ]
@@ -199,6 +201,15 @@ viewOptions options =
                 "Region"
                 (Maybe.withDefault emptyOptionValue options.region)
                 (SetRegion << stringToRegion)
+            ]
+        , div [ css optionsItemStyle ]
+            [ label [ css labelStyles ] [ text "Include adults?" ]
+            , input
+                [ type_ "checkbox"
+                , Html.Styled.Attributes.checked options.includeAdult
+                , onClick ToggleIncludeAdult
+                ]
+                []
             ]
 
         -- , div [ class "search-option" ]
