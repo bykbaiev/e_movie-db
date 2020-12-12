@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "watch": "webpack --mode development --watch",
-    "dev": "webpack-dev-server --mode development --port 3000"
+    "dev": "webpack-dev-server --hot --watch --mode development --port 3000"
   },
   "repository": {
     "type": "git",
@@ -21,6 +21,7 @@
   "dependencies": {},
   "devDependencies": {
     "dotenv": "^8.2.0",
+    "elm-hot-webpack-loader": "^1.1.7",
     "elm-webpack-loader": "^7.0.1",
     "file-loader": "^6.2.0",
     "loader-utils": "^2.0.0",

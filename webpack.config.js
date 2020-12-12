@@ -1,3 +1,4 @@
+const path = require('path');
 const webpack = require('webpack');
 
 const dotenv = require('dotenv').config();
@@ -8,15 +9,27 @@ module.exports = {
             {
                 test: /\.html$/,
                 exclude: /node_modules/,
-                use: ['file-loader?name=[name].[ext]']
+                use: [{
+                    loader: 'file-loader',
+                    options: {
+                        name: '[name].[ext]'
+                    }
+                }]
             },
             {
                 test: /\.elm$/,
                 exclude: [/elm-stuff/, /node_modules/],
-                use: [{
-                    loader: 'elm-webpack-loader',
-                    options: {}
-                }]
+
+                use: [
+                    {loader: 'elm-hot-webpack-loader'},
+                    {
+                        loader: 'elm-webpack-loader',
+                        options: {
+                            cwd: __dirname,
+                            debug: false
+                        }
+                    }
+                ]
             }
         ]
     },
@@ -24,11 +37,15 @@ module.exports = {
     plugins: [
         new webpack.DefinePlugin({
             'process.env': JSON.stringify(dotenv.parsed),
-        })
+        }),
+        new webpack.HotModuleReplacementPlugin()
     ],
+
+    mode: 'development',
 
     devServer: {
         inline: true,
+        hot: true,
         stats: 'errors-only'
     }
 };
