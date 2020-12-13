@@ -1,13 +1,14 @@
 module MainDB exposing (..)
 
+import Css exposing (..)
 import Html.Styled exposing (Html, button, div, h1, header, input, li, span, text)
-import Html.Styled.Attributes exposing (class, value)
+import Html.Styled.Attributes exposing (class, css, value)
 import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
 import Html.Styled.Keyed
 import Html.Styled.Lazy exposing (lazy)
 import Http
 import Json.Decode exposing (Decoder)
-import Json.Decode.Pipeline exposing (required)
+import Json.Decode.Pipeline as DPipeline
 import Ports exposing (storeQuery)
 import SearchOptions exposing (updateOptions)
 import String
@@ -22,7 +23,7 @@ type alias Flags =
 
 type alias Model =
     { query : String
-    , results : List Movie
+    , results : SearchResults
     , errorMessage : Maybe String
     , apiToken : Maybe String
     , searchOptions : SearchOptions.Options
@@ -42,16 +43,20 @@ type alias MovieError =
 
 type Msg
     = SetQuery String
-    | DeleteById Int
     | Search
-    | HandleSearchResults (Result Http.Error (List Movie))
+    | HandleSearchResults (Result Http.Error SearchResults)
     | Options SearchOptions.Msg
 
 
 initialModel : Model
 initialModel =
     { query = "Gentlemen"
-    , results = []
+    , results =
+        { movies = []
+        , page = 0
+        , totalResults = 0
+        , totalPages = 0
+        }
     , errorMessage = Nothing
     , apiToken = Nothing
     , searchOptions = SearchOptions.initialModel
@@ -93,9 +98,6 @@ update msg model =
 
         SetQuery query ->
             ( { model | query = query }, storeQuery query )
-
-        DeleteById id ->
-            ( { model | results = List.filter (\movie -> movie.id /= id) model.results }, Cmd.none )
 
         HandleSearchResults searchResults ->
             case searchResults of
@@ -144,7 +146,8 @@ view model =
         , button [ class "search-button", onClick Search ] [ text "Search" ]
         , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
         , viewErrorMessage model.errorMessage
-        , Html.Styled.Keyed.node "ul" [ class "results" ] (List.map viewKeyedSearchResult model.results)
+        , Html.Styled.Keyed.node "ul" [ class "results" ] (List.map viewKeyedSearchResult model.results.movies)
+        , lazy viewPagination { page = model.results.page, total = model.results.totalPages }
         ]
 
 
@@ -170,9 +173,114 @@ viewSearchResult movie =
     li []
         [ span [ class "star-count" ] [ text (String.fromFloat movie.rate) ]
         , span [ class "title" ] [ text movie.title ]
-        , button [ class "hide-movie", onClick (DeleteById movie.id) ]
-            [ text "X" ]
         ]
+
+
+paginationContainerStyle : List Style
+paginationContainerStyle =
+    [ displayFlex
+    , justifyContent center
+    , alignItems center
+    ]
+
+
+paginationColorGreen : Color
+paginationColorGreen =
+    hex "#4e8d7c"
+
+
+paginationColorWhite : Color
+paginationColorWhite =
+    hex "#fff"
+
+
+paginationCellBorderColor : Color
+paginationCellBorderColor =
+    hex "#e6e6e6"
+
+
+viewPagination : { page : Int, total : Int } -> Html Msg
+viewPagination { page, total } =
+    let
+        range =
+            if total < 10 then
+                List.range 1 total
+
+            else
+                List.filter
+                    (\x -> x > 0 && x < total + 1)
+                    [ page - 2, page - 1, page, page + 1, page + 2 ]
+
+        isFirstIncluded =
+            List.member 1 range
+
+        isLastIncluded =
+            List.member total range
+
+        firstContainer =
+            if not isFirstIncluded then
+                [ viewPaginationCell page 1
+                , viewPaginationSpace
+                ]
+
+            else
+                [ text "" ]
+
+        lastContainer =
+            if not isLastIncluded then
+                [ viewPaginationSpace
+                , viewPaginationCell page total
+                ]
+
+            else
+                [ text "" ]
+
+        rangeContainer =
+            div [ css paginationContainerStyle ] <| List.map (viewPaginationCell page) range
+    in
+    div
+        [ css paginationContainerStyle ]
+        (firstContainer
+            ++ rangeContainer
+            :: lastContainer
+        )
+
+
+viewPaginationCell : Int -> Int -> Html Msg
+viewPaginationCell selectedPage page =
+    let
+        selected =
+            selectedPage == page
+
+        selectedStyle =
+            if selected then
+                [ backgroundColor paginationColorGreen
+                , color paginationColorWhite
+                ]
+
+            else
+                []
+    in
+    div
+        [ css <|
+            [ margin2 zero (px 8)
+            , width <| px 40
+            , height <| px 40
+            , lineHeight <| px 40
+            , color paginationColorGreen
+            , backgroundColor paginationColorWhite
+            , textAlign center
+            , border3 (px 1) solid paginationCellBorderColor
+            , cursor pointer
+            ]
+                ++ selectedStyle
+        ]
+        [ text <| String.fromInt page ]
+
+
+viewPaginationSpace : Html msg
+viewPaginationSpace =
+    div [] [ text ". . ." ]
 
 
 onEnter : Msg -> Html.Styled.Attribute Msg
@@ -243,14 +351,26 @@ searchMovies query token options =
         }
 
 
-searchMoviesDecoder : Decoder (List Movie)
+type alias SearchResults =
+    { movies : List Movie
+    , page : Int
+    , totalPages : Int
+    , totalResults : Int
+    }
+
+
+searchMoviesDecoder : Decoder SearchResults
 searchMoviesDecoder =
-    Json.Decode.at [ "results" ] <| Json.Decode.list movieDecoder
+    Json.Decode.succeed SearchResults
+        |> DPipeline.required "results" (Json.Decode.list movieDecoder)
+        |> DPipeline.required "page" Json.Decode.int
+        |> DPipeline.required "total_pages" Json.Decode.int
+        |> DPipeline.required "total_results" Json.Decode.int
 
 
 movieDecoder : Decoder Movie
 movieDecoder =
     Json.Decode.succeed Movie
-        |> required "id" Json.Decode.int
-        |> required "title" Json.Decode.string
-        |> required "vote_average" Json.Decode.float
+        |> DPipeline.required "id" Json.Decode.int
+        |> DPipeline.required "title" Json.Decode.string
+        |> DPipeline.required "vote_average" Json.Decode.float
