@@ -133,8 +133,8 @@ viewOption selectedValue selectOption =
         [ text selectOption.text ]
 
 
-viewSelect : List { value : String, text : String } -> String -> String -> (String -> msg) -> Html msg
-viewSelect options labelText selectedValue selectOpt =
+viewSelect : List { value : String, text : String } -> { labelText : String, selectedValue : String } -> (String -> msg) -> Html msg
+viewSelect options { labelText, selectedValue } selectOpt =
     div [ class "search-option" ]
         [ label [ css labelStyles ] [ text labelText ]
         , select [ onChange selectOpt, value selectedValue ]
@@ -187,8 +187,9 @@ viewOptions options =
                 , { value = "en", text = "English" }
                 , { value = "de", text = "German" }
                 ]
-                "Language"
-                (Maybe.withDefault emptyOptionValue options.language)
+                { labelText = "Language"
+                , selectedValue = Maybe.withDefault emptyOptionValue options.language
+                }
                 (SetLanguage << stringToLanguage)
             ]
         , div [ css optionsItemStyle ]
@@ -198,8 +199,9 @@ viewOptions options =
                 , { value = "US", text = "United States" }
                 , { value = "DE", text = "Germany" }
                 ]
-                "Region"
-                (Maybe.withDefault emptyOptionValue options.region)
+                { labelText = "Region"
+                , selectedValue = Maybe.withDefault emptyOptionValue options.region
+                }
                 (SetRegion << stringToRegion)
             ]
         , div [ css optionsItemStyle ]
