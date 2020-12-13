@@ -46,6 +46,7 @@ type Msg
     | Search
     | HandleSearchResults (Result Http.Error SearchResults)
     | Options SearchOptions.Msg
+    | SetPage Int
 
 
 initialModel : Model
@@ -53,7 +54,7 @@ initialModel =
     { query = "Gentlemen"
     , results =
         { movies = []
-        , page = 0
+        , page = 1
         , totalResults = 0
         , totalPages = 0
         }
@@ -82,7 +83,7 @@ init { query, apiToken } =
         | query = initialQuery
         , apiToken = apiToken
       }
-    , searchMovies initialQuery apiToken initialModel.searchOptions
+    , searchMovies initialQuery apiToken initialModel.searchOptions initialModel.results.page
     )
 
 
@@ -94,7 +95,9 @@ update msg model =
                 ( { model | errorMessage = Just "Search query cannot be empty" }, Cmd.none )
 
             else
-                ( { model | errorMessage = Nothing }, searchMovies model.query model.apiToken model.searchOptions )
+                ( { model | errorMessage = Nothing }
+                , searchMovies model.query model.apiToken model.searchOptions 1
+                )
 
         SetQuery query ->
             ( { model | query = query }, storeQuery query )
@@ -127,12 +130,22 @@ update msg model =
 
         Options searchOptionsMsg ->
             let
-                searchOptions =
+                ( searchOptions, shouldReload ) =
                     updateOptions searchOptionsMsg model.searchOptions
+
+                cmd =
+                    if shouldReload then
+                        searchMovies model.query model.apiToken searchOptions 1
+
+                    else
+                        Cmd.none
             in
             ( { model | searchOptions = searchOptions }
-            , searchMovies model.query model.apiToken searchOptions
+            , cmd
             )
+
+        SetPage page ->
+            ( model, searchMovies model.query model.apiToken model.searchOptions page )
 
 
 view : Model -> Html Msg
@@ -238,12 +251,16 @@ viewPagination { page, total } =
         rangeContainer =
             div [ css paginationContainerStyle ] <| List.map (viewPaginationCell page) range
     in
-    div
-        [ css paginationContainerStyle ]
-        (firstContainer
-            ++ rangeContainer
-            :: lastContainer
-        )
+    if total == 0 then
+        div [] []
+
+    else
+        div
+            [ css paginationContainerStyle ]
+            (firstContainer
+                ++ rangeContainer
+                :: lastContainer
+            )
 
 
 viewPaginationCell : Int -> Int -> Html Msg
@@ -274,6 +291,7 @@ viewPaginationCell selectedPage page =
             , cursor pointer
             ]
                 ++ selectedStyle
+        , onClick <| SetPage page
         ]
         [ text <| String.fromInt page ]
 
@@ -296,8 +314,8 @@ onEnter msg =
     on "keydown" (Json.Decode.andThen isEnter keyCode)
 
 
-searchMovies : String -> Maybe String -> SearchOptions.Options -> Cmd Msg
-searchMovies query token options =
+searchMovies : String -> Maybe String -> SearchOptions.Options -> Int -> Cmd Msg
+searchMovies query token options page =
     let
         isEmptyToken =
             Maybe.withDefault "" token == ""
@@ -340,7 +358,8 @@ searchMovies query token options =
                     ++ regionQuery
                     ++ languageQuery
                     ++ includeAdultQuery
-                    ++ "&page=1"
+                    ++ "&page="
+                    ++ String.fromInt page
     in
     -- if isEmptyToken then
     --     Cmd. HandleSearchResults (Err (Http.BadUrl "There is no API token"))

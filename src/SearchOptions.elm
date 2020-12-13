@@ -68,26 +68,26 @@ yearRegex =
     Maybe.withDefault Regex.never <| Regex.fromString "^[12]\\d{3}$"
 
 
-updateOptions : Msg -> Options -> Options
+updateOptions : Msg -> Options -> ( Options, Bool )
 updateOptions msg options =
     case msg of
         SetOpened opened ->
-            { options | opened = opened }
+            ( { options | opened = opened }, False )
 
         SetLanguage language ->
-            { options | language = language }
+            ( { options | language = language }, True )
 
         ToggleIncludeAdult ->
-            { options | includeAdult = not options.includeAdult }
+            ( { options | includeAdult = not options.includeAdult }, True )
 
         SetRegion region ->
-            { options | region = region }
+            ( { options | region = region }, True )
 
         SetYear year ->
-            { options | year = year }
+            ( { options | year = year }, True )
 
         SetPrimaryReleaseYear primaryReleaseYear ->
-            { options | primaryReleaseYear = primaryReleaseYear }
+            ( { options | primaryReleaseYear = primaryReleaseYear }, True )
 
 
 onBlurWithTargetValue : (String -> msg) -> Attribute msg
