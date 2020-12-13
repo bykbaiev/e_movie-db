@@ -44,14 +44,14 @@ type alias MovieError =
 type Msg
     = SetQuery String
     | Search
-    | HandleSearchResults (Result Http.Error SearchResults)
+    | HandleMoviesRequestResult (Result Http.Error SearchResults)
     | Options SearchOptions.Msg
     | SetPage Int
 
 
 initialModel : Model
 initialModel =
-    { query = "Gentlemen"
+    { query = ""
     , results =
         { movies = []
         , page = 1
@@ -67,23 +67,26 @@ initialModel =
 init : Flags -> ( Model, Cmd Msg )
 init { query, apiToken } =
     let
-        initialQuery =
+        shouldSearch =
             query
-                |> Maybe.map
-                    (\v ->
-                        if v == "" then
-                            initialModel.query
+                |> Maybe.map (\value -> value /= "")
+                |> Maybe.withDefault False
 
-                        else
-                            v
-                    )
-                |> Maybe.withDefault initialModel.query
+        initialQuery =
+            Maybe.withDefault "" query
+
+        cmd =
+            if shouldSearch then
+                searchMovies initialQuery apiToken initialModel.searchOptions initialModel.results.page
+
+            else
+                getTopRatedMovies apiToken initialModel.results.page
     in
     ( { initialModel
         | query = initialQuery
         , apiToken = apiToken
       }
-    , searchMovies initialQuery apiToken initialModel.searchOptions initialModel.results.page
+    , cmd
     )
 
 
@@ -102,7 +105,7 @@ update msg model =
         SetQuery query ->
             ( { model | query = query }, storeQuery query )
 
-        HandleSearchResults searchResults ->
+        HandleMoviesRequestResult searchResults ->
             case searchResults of
                 Err error ->
                     let
@@ -362,11 +365,29 @@ searchMovies query token options page =
                     ++ String.fromInt page
     in
     -- if isEmptyToken then
-    --     Cmd. HandleSearchResults (Err (Http.BadUrl "There is no API token"))
+    --     Cmd. HandleMoviesRequestResult (Err (Http.BadUrl "There is no API token"))
     -- else
     Http.get
         { url = url
-        , expect = Http.expectJson HandleSearchResults searchMoviesDecoder
+        , expect = Http.expectJson HandleMoviesRequestResult moviesDecoder
+        }
+
+
+getTopRatedMovies : Maybe String -> Int -> Cmd Msg
+getTopRatedMovies token page =
+    let
+        url =
+            baseUrl
+                ++ "movie/top_rated?api_key="
+                ++ Maybe.withDefault "" token
+                -- ++ regionQuery
+                -- ++ languageQuery
+                ++ "&page="
+                ++ String.fromInt page
+    in
+    Http.get
+        { url = url
+        , expect = Http.expectJson HandleMoviesRequestResult moviesDecoder
         }
 
 
@@ -378,8 +399,8 @@ type alias SearchResults =
     }
 
 
-searchMoviesDecoder : Decoder SearchResults
-searchMoviesDecoder =
+moviesDecoder : Decoder SearchResults
+moviesDecoder =
     Json.Decode.succeed SearchResults
         |> DPipeline.required "results" (Json.Decode.list movieDecoder)
         |> DPipeline.required "page" Json.Decode.int
