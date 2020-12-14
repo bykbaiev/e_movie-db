@@ -12,6 +12,7 @@ import Json.Decode.Pipeline as DPipeline
 import Ports exposing (storeQuery)
 import SearchOptions exposing (updateOptions)
 import String
+import Task exposing (Task)
 import Url exposing (baseUrl)
 
 
@@ -21,12 +22,19 @@ type alias Flags =
     }
 
 
+type Tab
+    = Main
+    | Favorite
+    | Recommendations
+
+
 type alias Model =
     { query : String
-    , results : SearchResults
+    , results : MoviesResults
     , errorMessage : Maybe String
     , apiToken : Maybe String
     , searchOptions : SearchOptions.Options
+    , tab : Tab
     }
 
 
@@ -37,16 +45,27 @@ type alias Movie =
     }
 
 
-type alias MovieError =
-    String
+type alias MoviesResults =
+    { movies : List Movie
+    , page : Int
+    , totalPages : Int
+    , totalResults : Int
+    }
+
+
+type alias Genre =
+    { id : Int
+    , name : String
+    }
 
 
 type Msg
     = SetQuery String
     | Search
-    | HandleMoviesRequestResult (Result Http.Error SearchResults)
+    | GotMovies (Result Http.Error MoviesResults)
     | Options SearchOptions.Msg
     | SetPage Int
+    | SetTab Tab
 
 
 initialModel : Model
@@ -61,32 +80,28 @@ initialModel =
     , errorMessage = Nothing
     , apiToken = Nothing
     , searchOptions = SearchOptions.initialModel
+    , tab = Main
     }
 
 
 init : Flags -> ( Model, Cmd Msg )
 init { query, apiToken } =
     let
-        shouldSearch =
-            query
-                |> Maybe.map (\value -> value /= "")
-                |> Maybe.withDefault False
-
         initialQuery =
             Maybe.withDefault "" query
-
-        cmd =
-            if shouldSearch then
-                searchMovies initialQuery apiToken initialModel.searchOptions initialModel.results.page
-
-            else
-                getTopRatedMovies apiToken initialModel.results.page
     in
     ( { initialModel
         | query = initialQuery
         , apiToken = apiToken
       }
-    , cmd
+    , { tab = initialModel.tab
+      , token = apiToken
+      , query = initialQuery
+      , options = initialModel.searchOptions
+      , page = initialModel.results.page
+      }
+        |> fetchMovies
+        |> Task.attempt GotMovies
     )
 
 
@@ -94,19 +109,57 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Search ->
-            if model.query == "" then
-                ( { model | errorMessage = Just "Search query cannot be empty" }, Cmd.none )
-
-            else
-                ( { model | errorMessage = Nothing }
-                , searchMovies model.query model.apiToken model.searchOptions 1
-                )
+            ( { model | errorMessage = Nothing }
+            , { query = model.query
+              , token = model.apiToken
+              , options = model.searchOptions
+              , page = 1
+              , tab = model.tab
+              }
+                |> fetchMovies
+                |> Task.attempt GotMovies
+            )
 
         SetQuery query ->
             ( { model | query = query }, storeQuery query )
 
-        HandleMoviesRequestResult searchResults ->
-            case searchResults of
+        Options searchOptionsMsg ->
+            let
+                ( searchOptions, shouldReload ) =
+                    updateOptions searchOptionsMsg model.searchOptions
+
+                cmd =
+                    if shouldReload then
+                        { query = model.query
+                        , token = model.apiToken
+                        , options = searchOptions
+                        , page = 1
+                        , tab = model.tab
+                        }
+                            |> fetchMovies
+                            |> Task.attempt GotMovies
+
+                    else
+                        Cmd.none
+            in
+            ( { model | searchOptions = searchOptions }
+            , cmd
+            )
+
+        SetPage page ->
+            ( model
+            , { query = model.query
+              , token = model.apiToken
+              , options = model.searchOptions
+              , page = page
+              , tab = model.tab
+              }
+                |> fetchMovies
+                |> Task.attempt GotMovies
+            )
+
+        GotMovies moviesResults ->
+            case moviesResults of
                 Err error ->
                     let
                         errorMessage =
@@ -131,24 +184,8 @@ update msg model =
                 Ok results ->
                     ( { model | results = results, errorMessage = Nothing }, Cmd.none )
 
-        Options searchOptionsMsg ->
-            let
-                ( searchOptions, shouldReload ) =
-                    updateOptions searchOptionsMsg model.searchOptions
-
-                cmd =
-                    if shouldReload then
-                        searchMovies model.query model.apiToken searchOptions 1
-
-                    else
-                        Cmd.none
-            in
-            ( { model | searchOptions = searchOptions }
-            , cmd
-            )
-
-        SetPage page ->
-            ( model, searchMovies model.query model.apiToken model.searchOptions page )
+        SetTab tab ->
+            ( { model | tab = tab }, Cmd.none )
 
 
 view : Model -> Html Msg
@@ -317,91 +354,133 @@ onEnter msg =
     on "keydown" (Json.Decode.andThen isEnter keyCode)
 
 
-searchMovies : String -> Maybe String -> SearchOptions.Options -> Int -> Cmd Msg
-searchMovies query token options page =
+queryParam : { name : String, value : String, isFirst : Bool } -> String
+queryParam { name, value, isFirst } =
     let
-        isEmptyToken =
-            Maybe.withDefault "" token == ""
-
-        regionQuery =
-            case options.region of
-                Just region ->
-                    "&region=" ++ region
-
-                Nothing ->
-                    ""
-
-        languageQuery =
-            case options.language of
-                Just language ->
-                    "&language=" ++ language
-
-                Nothing ->
-                    ""
-
-        includeAdultQuery =
-            "&include_adult="
-                ++ (if options.includeAdult then
-                        "true"
-
-                    else
-                        "false"
-                   )
-
-        url =
-            if isEmptyToken then
-                ""
+        symb =
+            if isFirst then
+                "?"
 
             else
-                baseUrl
-                    ++ "search/movie?api_key="
-                    ++ Maybe.withDefault "" token
-                    ++ "&query="
-                    ++ query
-                    ++ regionQuery
-                    ++ languageQuery
-                    ++ includeAdultQuery
-                    ++ "&page="
-                    ++ String.fromInt page
+                "&"
     in
-    -- if isEmptyToken then
-    --     Cmd. HandleMoviesRequestResult (Err (Http.BadUrl "There is no API token"))
-    -- else
-    Http.get
-        { url = url
-        , expect = Http.expectJson HandleMoviesRequestResult moviesDecoder
-        }
+    if value /= "" then
+        symb ++ name ++ "=" ++ value
+
+    else
+        ""
 
 
-getTopRatedMovies : Maybe String -> Int -> Cmd Msg
-getTopRatedMovies token page =
+fetchMovies : { tab : Tab, token : Maybe String, query : String, options : SearchOptions.Options, page : Int } -> Task Http.Error MoviesResults
+fetchMovies { tab, token, query, options, page } =
     let
+        isMissingToken =
+            token
+                |> Maybe.map (\t -> t == "")
+                |> Maybe.withDefault True
+
+        tokenQuery =
+            queryParam
+                { name = "api_key"
+                , value = Maybe.withDefault "" token
+                , isFirst = True
+                }
+
+        searchQuery =
+            queryParam
+                { name = "query"
+                , value = query
+                , isFirst = False
+                }
+
+        regionQuery =
+            queryParam
+                { name = "region"
+                , value = Maybe.withDefault "" options.region
+                , isFirst = False
+                }
+
+        languageQuery =
+            queryParam
+                { name = "language"
+                , value = Maybe.withDefault "" options.language
+                , isFirst = False
+                }
+
+        pageQuery =
+            queryParam
+                { name = "page"
+                , value = String.fromInt page
+                , isFirst = False
+                }
+
         url =
-            baseUrl
-                ++ "movie/top_rated?api_key="
-                ++ Maybe.withDefault "" token
-                -- ++ regionQuery
-                -- ++ languageQuery
-                ++ "&page="
-                ++ String.fromInt page
+            case tab of
+                Main ->
+                    if query /= "" then
+                        baseUrl
+                            ++ "search/movie"
+                            ++ tokenQuery
+                            ++ searchQuery
+                            ++ regionQuery
+                            ++ languageQuery
+                            ++ pageQuery
+
+                    else
+                        baseUrl
+                            ++ "movie/top_rated"
+                            ++ tokenQuery
+                            ++ regionQuery
+                            ++ languageQuery
+                            ++ pageQuery
+
+                Favorite ->
+                    ""
+
+                Recommendations ->
+                    ""
     in
-    Http.get
-        { url = url
-        , expect = Http.expectJson HandleMoviesRequestResult moviesDecoder
-        }
+    if isMissingToken then
+        Task.fail <| Http.BadUrl "Missing API token"
+
+    else
+        Http.task
+            { method = "GET"
+            , headers = []
+            , url = url
+            , body = Http.emptyBody
+            , resolver = Http.stringResolver <| handleJsonResponse <| moviesDecoder
+            , timeout = Nothing
+            }
 
 
-type alias SearchResults =
-    { movies : List Movie
-    , page : Int
-    , totalPages : Int
-    , totalResults : Int
-    }
+handleJsonResponse : Decoder a -> Http.Response String -> Result Http.Error a
+handleJsonResponse decoder response =
+    case response of
+        Http.BadUrl_ url ->
+            Err (Http.BadUrl url)
+
+        Http.Timeout_ ->
+            Err Http.Timeout
+
+        Http.BadStatus_ { statusCode } _ ->
+            Err (Http.BadStatus statusCode)
+
+        Http.NetworkError_ ->
+            Err Http.NetworkError
+
+        Http.GoodStatus_ _ body ->
+            case Json.Decode.decodeString decoder body of
+                Err _ ->
+                    Err (Http.BadBody body)
+
+                Ok result ->
+                    Ok result
 
 
-moviesDecoder : Decoder SearchResults
+moviesDecoder : Decoder MoviesResults
 moviesDecoder =
-    Json.Decode.succeed SearchResults
+    Json.Decode.succeed MoviesResults
         |> DPipeline.required "results" (Json.Decode.list movieDecoder)
         |> DPipeline.required "page" Json.Decode.int
         |> DPipeline.required "total_pages" Json.Decode.int
@@ -414,3 +493,10 @@ movieDecoder =
         |> DPipeline.required "id" Json.Decode.int
         |> DPipeline.required "title" Json.Decode.string
         |> DPipeline.required "vote_average" Json.Decode.float
+
+
+genreDecoder : Decoder Genre
+genreDecoder =
+    Json.Decode.succeed Genre
+        |> DPipeline.required "id" Json.Decode.int
+        |> DPipeline.required "name" Json.Decode.string
