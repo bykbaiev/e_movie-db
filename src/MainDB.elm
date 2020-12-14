@@ -37,12 +37,6 @@ type alias Model =
     }
 
 
-type alias Genre =
-    { id : Int
-    , name : String
-    }
-
-
 type Msg
     = SetQuery String
     | Search
@@ -329,17 +323,6 @@ onEnter msg =
                 Json.Decode.fail "not ENTER"
     in
     on "keydown" (Json.Decode.andThen isEnter keyCode)
-
-
-
--- SERIALIZATION
-
-
-genreDecoder : Decoder Genre
-genreDecoder =
-    Json.Decode.succeed Genre
-        |> DPipeline.required "id" Json.Decode.int
-        |> DPipeline.required "name" Json.Decode.string
 
 
 
