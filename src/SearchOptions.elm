@@ -1,4 +1,4 @@
-module SearchOptions exposing (..)
+module SearchOptions exposing (Msg, Options, initialModel, updateOptions, view)
 
 import Css exposing (..)
 import Html.Attributes exposing (style)
@@ -6,31 +6,10 @@ import Html.Styled exposing (..)
 import Html.Styled.Attributes exposing (class, css, selected, type_, value)
 import Html.Styled.Events exposing (on, onClick, targetValue)
 import Json.Decode
-import Regex exposing (Regex)
 
 
-languages : List String
-languages =
-    [ "en", "de" ]
 
-
-regions : List String
-regions =
-    [ "US", "GB", "DE" ]
-
-
-emptyOptionValue : String
-emptyOptionValue =
-    "none"
-
-
-labelStyles : List Style
-labelStyles =
-    [ display block
-    , marginBottom (px 8)
-    , fontSize (px 14)
-    , fontWeight (int 500)
-    ]
+-- TYPES
 
 
 type alias Options =
@@ -52,6 +31,16 @@ type Msg
     | SetPrimaryReleaseYear (Maybe Int)
 
 
+type alias SelectOption =
+    { value : String
+    , text : String
+    }
+
+
+
+-- MODEL
+
+
 initialModel : Options
 initialModel =
     { opened = False
@@ -63,9 +52,17 @@ initialModel =
     }
 
 
-yearRegex : Regex
-yearRegex =
-    Maybe.withDefault Regex.never <| Regex.fromString "^[12]\\d{3}$"
+
+-- UPDATE
+{-
+   Update function is slightly custom. It's not the
+   standard TEA update: we return not the model and the command
+   but the model and the flag if movies should be reloaded.
+
+   The reason is that there is opened state which indicates if it's the
+   advanced search settings mode or not. And the search request on opened state
+   change should be prevented.
+-}
 
 
 updateOptions : Msg -> Options -> ( Options, Bool )
@@ -90,56 +87,8 @@ updateOptions msg options =
             ( { options | primaryReleaseYear = primaryReleaseYear }, True )
 
 
-onBlurWithTargetValue : (String -> msg) -> Attribute msg
-onBlurWithTargetValue toMsg =
-    on "blur" (Json.Decode.map toMsg targetValue)
 
-
-onChange : (String -> msg) -> Attribute msg
-onChange toMsg =
-    on "change" (Json.Decode.map toMsg targetValue)
-
-
-stringToLanguage : String -> Maybe String
-stringToLanguage language =
-    if List.any (\lang -> lang == language) languages then
-        Just language
-
-    else
-        Nothing
-
-
-stringToRegion : String -> Maybe String
-stringToRegion region =
-    if List.any (\reg -> reg == region) regions then
-        Just region
-
-    else
-        Nothing
-
-
-type alias SelectOption =
-    { value : String
-    , text : String
-    }
-
-
-viewOption : String -> SelectOption -> Html msg
-viewOption selectedValue selectOption =
-    option
-        [ selected (selectedValue == selectOption.value)
-        , value selectOption.value
-        ]
-        [ text selectOption.text ]
-
-
-viewSelect : List { value : String, text : String } -> { labelText : String, selectedValue : String } -> (String -> msg) -> Html msg
-viewSelect options { labelText, selectedValue } selectOpt =
-    div [ class "search-option" ]
-        [ label [ css labelStyles ] [ text labelText ]
-        , select [ onChange selectOpt, value selectedValue ]
-            (List.map (viewOption selectedValue) options)
-        ]
+-- VIEW
 
 
 view : Options -> Html Msg
@@ -167,9 +116,22 @@ view options =
         ]
 
 
-optionsItemStyle : List Style
-optionsItemStyle =
-    [ marginRight (px 8) ]
+viewOption : String -> SelectOption -> Html msg
+viewOption selectedValue selectOption =
+    option
+        [ selected (selectedValue == selectOption.value)
+        , value selectOption.value
+        ]
+        [ text selectOption.text ]
+
+
+viewSelect : List { value : String, text : String } -> { labelText : String, selectedValue : String } -> (String -> msg) -> Html msg
+viewSelect options { labelText, selectedValue } selectOpt =
+    div [ class "search-option" ]
+        [ label [ css labelStyles ] [ text labelText ]
+        , select [ onChange selectOpt, value selectedValue ]
+            (List.map (viewOption selectedValue) options)
+        ]
 
 
 viewOptions : Options -> Html Msg
@@ -181,7 +143,7 @@ viewOptions options =
             , padding2 (px 8) zero
             ]
         ]
-        [ div [ css optionsItemStyle ]
+        [ div [ css optionsItemStyles ]
             [ viewSelect
                 [ { value = emptyOptionValue, text = "None" }
                 , { value = "en", text = "English" }
@@ -192,7 +154,7 @@ viewOptions options =
                 }
                 (SetLanguage << stringToLanguage)
             ]
-        , div [ css optionsItemStyle ]
+        , div [ css optionsItemStyles ]
             [ viewSelect
                 [ { value = emptyOptionValue, text = "None" }
                 , { value = "GB", text = "United Kingdom" }
@@ -204,7 +166,7 @@ viewOptions options =
                 }
                 (SetRegion << stringToRegion)
             ]
-        , div [ css optionsItemStyle ]
+        , div [ css optionsItemStyles ]
             [ label [ css labelStyles ] [ text "Include adults?" ]
             , input
                 [ type_ "checkbox"
@@ -235,3 +197,79 @@ viewOptions options =
         --     -- , viewMinStarsError opts.minStarsError
         --     ]
         ]
+
+
+
+-- STYLES
+
+
+labelStyles : List Style
+labelStyles =
+    [ display block
+    , marginBottom (px 8)
+    , fontSize (px 14)
+    , fontWeight (int 500)
+    ]
+
+
+optionsItemStyles : List Style
+optionsItemStyles =
+    [ marginRight (px 8) ]
+
+
+
+-- CONSTANTS
+{-
+   Constants related to search options form fields
+-}
+
+
+languages : List String
+languages =
+    [ "en", "de" ]
+
+
+regions : List String
+regions =
+    [ "US", "GB", "DE" ]
+
+
+emptyOptionValue : String
+emptyOptionValue =
+    "none"
+
+
+
+-- EVENTS
+
+
+onBlurWithTargetValue : (String -> msg) -> Attribute msg
+onBlurWithTargetValue toMsg =
+    on "blur" (Json.Decode.map toMsg targetValue)
+
+
+onChange : (String -> msg) -> Attribute msg
+onChange toMsg =
+    on "change" (Json.Decode.map toMsg targetValue)
+
+
+
+-- MAPPERS
+
+
+stringToLanguage : String -> Maybe String
+stringToLanguage language =
+    if List.any (\lang -> lang == language) languages then
+        Just language
+
+    else
+        Nothing
+
+
+stringToRegion : String -> Maybe String
+stringToRegion region =
+    if List.any (\reg -> reg == region) regions then
+        Just region
+
+    else
+        Nothing

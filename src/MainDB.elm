@@ -9,23 +9,22 @@ import Html.Styled.Lazy exposing (lazy)
 import Http
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline as DPipeline
+import Movie exposing (Movie, MoviesResults)
 import Ports exposing (storeQuery)
 import SearchOptions exposing (updateOptions)
 import String
-import Task exposing (Task)
-import Url exposing (baseUrl)
+import Tab exposing (..)
+import Task
+
+
+
+-- TYPES
 
 
 type alias Flags =
     { query : Maybe String
     , apiToken : Maybe String
     }
-
-
-type Tab
-    = Main
-    | Favorite
-    | Recommendations
 
 
 type alias Model =
@@ -35,21 +34,6 @@ type alias Model =
     , apiToken : Maybe String
     , searchOptions : SearchOptions.Options
     , tab : Tab
-    }
-
-
-type alias Movie =
-    { id : Int
-    , title : String
-    , rate : Float
-    }
-
-
-type alias MoviesResults =
-    { movies : List Movie
-    , page : Int
-    , totalPages : Int
-    , totalResults : Int
     }
 
 
@@ -66,6 +50,10 @@ type Msg
     | Options SearchOptions.Msg
     | SetPage Int
     | SetTab Tab
+
+
+
+-- MODEL
 
 
 initialModel : Model
@@ -100,9 +88,13 @@ init { query, apiToken } =
       , options = initialModel.searchOptions
       , page = initialModel.results.page
       }
-        |> fetchMovies
+        |> Movie.fetch
         |> Task.attempt GotMovies
     )
+
+
+
+-- UPDATE
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -116,7 +108,7 @@ update msg model =
               , page = 1
               , tab = model.tab
               }
-                |> fetchMovies
+                |> Movie.fetch
                 |> Task.attempt GotMovies
             )
 
@@ -136,7 +128,7 @@ update msg model =
                         , page = 1
                         , tab = model.tab
                         }
-                            |> fetchMovies
+                            |> Movie.fetch
                             |> Task.attempt GotMovies
 
                     else
@@ -154,7 +146,7 @@ update msg model =
               , page = page
               , tab = model.tab
               }
-                |> fetchMovies
+                |> Movie.fetch
                 |> Task.attempt GotMovies
             )
 
@@ -186,6 +178,10 @@ update msg model =
 
         SetTab tab ->
             ( { model | tab = tab }, Cmd.none )
+
+
+
+-- VIEW
 
 
 view : Model -> Html Msg
@@ -227,29 +223,6 @@ viewSearchResult movie =
         [ span [ class "star-count" ] [ text (String.fromFloat movie.rate) ]
         , span [ class "title" ] [ text movie.title ]
         ]
-
-
-paginationContainerStyle : List Style
-paginationContainerStyle =
-    [ displayFlex
-    , justifyContent center
-    , alignItems center
-    ]
-
-
-paginationColorGreen : Color
-paginationColorGreen =
-    hex "#4e8d7c"
-
-
-paginationColorWhite : Color
-paginationColorWhite =
-    hex "#fff"
-
-
-paginationCellBorderColor : Color
-paginationCellBorderColor =
-    hex "#e6e6e6"
 
 
 viewPagination : { page : Int, total : Int } -> Html Msg
@@ -341,6 +314,10 @@ viewPaginationSpace =
     div [] [ text ". . ." ]
 
 
+
+-- EVENTS
+
+
 onEnter : Msg -> Html.Styled.Attribute Msg
 onEnter msg =
     let
@@ -354,145 +331,8 @@ onEnter msg =
     on "keydown" (Json.Decode.andThen isEnter keyCode)
 
 
-queryParam : { name : String, value : String, isFirst : Bool } -> String
-queryParam { name, value, isFirst } =
-    let
-        symb =
-            if isFirst then
-                "?"
 
-            else
-                "&"
-    in
-    if value /= "" then
-        symb ++ name ++ "=" ++ value
-
-    else
-        ""
-
-
-fetchMovies : { tab : Tab, token : Maybe String, query : String, options : SearchOptions.Options, page : Int } -> Task Http.Error MoviesResults
-fetchMovies { tab, token, query, options, page } =
-    let
-        isMissingToken =
-            token
-                |> Maybe.map (\t -> t == "")
-                |> Maybe.withDefault True
-
-        tokenQuery =
-            queryParam
-                { name = "api_key"
-                , value = Maybe.withDefault "" token
-                , isFirst = True
-                }
-
-        searchQuery =
-            queryParam
-                { name = "query"
-                , value = query
-                , isFirst = False
-                }
-
-        regionQuery =
-            queryParam
-                { name = "region"
-                , value = Maybe.withDefault "" options.region
-                , isFirst = False
-                }
-
-        languageQuery =
-            queryParam
-                { name = "language"
-                , value = Maybe.withDefault "" options.language
-                , isFirst = False
-                }
-
-        pageQuery =
-            queryParam
-                { name = "page"
-                , value = String.fromInt page
-                , isFirst = False
-                }
-
-        url =
-            case tab of
-                Main ->
-                    if query /= "" then
-                        baseUrl
-                            ++ "search/movie"
-                            ++ tokenQuery
-                            ++ searchQuery
-                            ++ regionQuery
-                            ++ languageQuery
-                            ++ pageQuery
-
-                    else
-                        baseUrl
-                            ++ "movie/top_rated"
-                            ++ tokenQuery
-                            ++ regionQuery
-                            ++ languageQuery
-                            ++ pageQuery
-
-                Favorite ->
-                    ""
-
-                Recommendations ->
-                    ""
-    in
-    if isMissingToken then
-        Task.fail <| Http.BadUrl "Missing API token"
-
-    else
-        Http.task
-            { method = "GET"
-            , headers = []
-            , url = url
-            , body = Http.emptyBody
-            , resolver = Http.stringResolver <| handleJsonResponse <| moviesDecoder
-            , timeout = Nothing
-            }
-
-
-handleJsonResponse : Decoder a -> Http.Response String -> Result Http.Error a
-handleJsonResponse decoder response =
-    case response of
-        Http.BadUrl_ url ->
-            Err (Http.BadUrl url)
-
-        Http.Timeout_ ->
-            Err Http.Timeout
-
-        Http.BadStatus_ { statusCode } _ ->
-            Err (Http.BadStatus statusCode)
-
-        Http.NetworkError_ ->
-            Err Http.NetworkError
-
-        Http.GoodStatus_ _ body ->
-            case Json.Decode.decodeString decoder body of
-                Err _ ->
-                    Err (Http.BadBody body)
-
-                Ok result ->
-                    Ok result
-
-
-moviesDecoder : Decoder MoviesResults
-moviesDecoder =
-    Json.Decode.succeed MoviesResults
-        |> DPipeline.required "results" (Json.Decode.list movieDecoder)
-        |> DPipeline.required "page" Json.Decode.int
-        |> DPipeline.required "total_pages" Json.Decode.int
-        |> DPipeline.required "total_results" Json.Decode.int
-
-
-movieDecoder : Decoder Movie
-movieDecoder =
-    Json.Decode.succeed Movie
-        |> DPipeline.required "id" Json.Decode.int
-        |> DPipeline.required "title" Json.Decode.string
-        |> DPipeline.required "vote_average" Json.Decode.float
+-- SERIALIZATION
 
 
 genreDecoder : Decoder Genre
@@ -500,3 +340,30 @@ genreDecoder =
     Json.Decode.succeed Genre
         |> DPipeline.required "id" Json.Decode.int
         |> DPipeline.required "name" Json.Decode.string
+
+
+
+-- STYLES AND COLORS
+
+
+paginationContainerStyle : List Style
+paginationContainerStyle =
+    [ displayFlex
+    , justifyContent center
+    , alignItems center
+    ]
+
+
+paginationColorGreen : Color
+paginationColorGreen =
+    hex "#4e8d7c"
+
+
+paginationColorWhite : Color
+paginationColorWhite =
+    hex "#fff"
+
+
+paginationCellBorderColor : Color
+paginationCellBorderColor =
+    hex "#e6e6e6"
