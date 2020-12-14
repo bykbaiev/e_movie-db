@@ -1,16 +1,17 @@
 module MainDB exposing (..)
 
 import Css exposing (..)
+import Genre exposing (Genre, GenresResults)
 import Html.Styled exposing (Html, button, div, h1, header, input, li, span, text)
 import Html.Styled.Attributes exposing (class, css, value)
 import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
 import Html.Styled.Keyed
 import Html.Styled.Lazy exposing (lazy)
 import Http
-import Json.Decode exposing (Decoder)
-import Json.Decode.Pipeline as DPipeline
+import Json.Decode
 import Movie exposing (Movie, MoviesResults)
 import Ports exposing (storeQuery)
+import RequestHelpers
 import SearchOptions exposing (updateOptions)
 import String
 import Tab exposing (..)
@@ -34,6 +35,7 @@ type alias Model =
     , apiToken : Maybe String
     , searchOptions : SearchOptions.Options
     , tab : Tab
+    , genres : GenresResults
     }
 
 
@@ -44,6 +46,7 @@ type Msg
     | Options SearchOptions.Msg
     | SetPage Int
     | SetTab Tab
+    | GotGenres (Result Http.Error GenresResults)
 
 
 
@@ -63,6 +66,7 @@ initialModel =
     , apiToken = Nothing
     , searchOptions = SearchOptions.initialModel
     , tab = Main
+    , genres = []
     }
 
 
@@ -76,14 +80,17 @@ init { query, apiToken } =
         | query = initialQuery
         , apiToken = apiToken
       }
-    , { tab = initialModel.tab
-      , token = apiToken
-      , query = initialQuery
-      , options = initialModel.searchOptions
-      , page = initialModel.results.page
-      }
-        |> Movie.fetch
-        |> Task.attempt GotMovies
+    , Cmd.batch
+        [ { tab = initialModel.tab
+          , token = apiToken
+          , query = initialQuery
+          , options = initialModel.searchOptions
+          , page = initialModel.results.page
+          }
+            |> Movie.fetch
+            |> Task.attempt GotMovies
+        , Task.attempt GotGenres <| Genre.fetch apiToken
+        ]
     )
 
 
@@ -147,31 +154,21 @@ update msg model =
         GotMovies moviesResults ->
             case moviesResults of
                 Err error ->
-                    let
-                        errorMessage =
-                            case error of
-                                Http.BadUrl message ->
-                                    message
-
-                                Http.Timeout ->
-                                    "Timeout is reached"
-
-                                Http.NetworkError ->
-                                    "There are some network errors. Please, check your connection"
-
-                                Http.BadStatus status ->
-                                    "The requests failed with status code " ++ String.fromInt status
-
-                                Http.BadBody message ->
-                                    "The request failed with some bad body: " ++ message
-                    in
-                    ( { model | errorMessage = Just errorMessage }, Cmd.none )
+                    ( { model | errorMessage = Just <| RequestHelpers.toString error }, Cmd.none )
 
                 Ok results ->
                     ( { model | results = results, errorMessage = Nothing }, Cmd.none )
 
         SetTab tab ->
             ( { model | tab = tab }, Cmd.none )
+
+        GotGenres genresResults ->
+            case genresResults of
+                Err error ->
+                    ( { model | errorMessage = Just <| RequestHelpers.toString error }, Cmd.none )
+
+                Ok genres ->
+                    ( { model | genres = genres, errorMessage = Nothing }, Cmd.none )
 
 
 

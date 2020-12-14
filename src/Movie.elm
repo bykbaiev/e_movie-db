@@ -1,7 +1,7 @@
 module Movie exposing (Movie, MoviesResults, fetch)
 
 import Http
-import Json.Decode exposing (Decoder)
+import Json.Decode exposing (Decoder, bool, float, int, list, string, succeed)
 import Json.Decode.Pipeline exposing (required)
 import RequestHelpers exposing (handleJsonResponse, queryParam)
 import SearchOptions
@@ -18,6 +18,14 @@ type alias Movie =
     { id : Int
     , title : String
     , rate : Float
+    , genreIds : List Int
+    , originalLanguage : String
+    , originalTitle : String
+    , overview : String
+    , posterPath : String
+    , releaseDate : String
+    , backdropPath : String
+    , adult : Bool
     }
 
 
@@ -122,16 +130,24 @@ fetch { tab, token, query, options, page } =
 
 moviesDecoder : Decoder MoviesResults
 moviesDecoder =
-    Json.Decode.succeed MoviesResults
-        |> required "results" (Json.Decode.list movieDecoder)
-        |> required "page" Json.Decode.int
-        |> required "total_pages" Json.Decode.int
-        |> required "total_results" Json.Decode.int
+    succeed MoviesResults
+        |> required "results" (list movieDecoder)
+        |> required "page" int
+        |> required "total_pages" int
+        |> required "total_results" int
 
 
 movieDecoder : Decoder Movie
 movieDecoder =
-    Json.Decode.succeed Movie
-        |> required "id" Json.Decode.int
-        |> required "title" Json.Decode.string
-        |> required "vote_average" Json.Decode.float
+    succeed Movie
+        |> required "id" int
+        |> required "title" string
+        |> required "vote_average" float
+        |> required "genre_ids" (list int)
+        |> required "original_language" string
+        |> required "original_title" string
+        |> required "overview" string
+        |> required "poster_path" string
+        |> required "release_date" string
+        |> required "backdrop_path" string
+        |> required "adult" bool

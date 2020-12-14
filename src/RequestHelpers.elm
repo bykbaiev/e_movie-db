@@ -1,4 +1,4 @@
-module RequestHelpers exposing (handleJsonResponse, queryParam)
+module RequestHelpers exposing (handleJsonResponse, queryParam, toString)
 
 import Http
 import Json.Decode exposing (Decoder)
@@ -43,3 +43,22 @@ queryParam { name, value, isFirst } =
 
     else
         ""
+
+
+toString : Http.Error -> String
+toString error =
+    case error of
+        Http.BadUrl message ->
+            message
+
+        Http.Timeout ->
+            "Timeout is reached"
+
+        Http.NetworkError ->
+            "There are some network errors. Please, check your connection"
+
+        Http.BadStatus status ->
+            "The requests failed with status code " ++ String.fromInt status
+
+        Http.BadBody message ->
+            "The request failed with some bad body: " ++ message
