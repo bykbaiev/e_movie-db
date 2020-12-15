@@ -1,13 +1,13 @@
-module Movie exposing (Movie, MoviesResults, fetch)
+module Movie exposing (Movie, MoviesResults, fetch, getPoster)
 
 import Http
-import Json.Decode exposing (Decoder, bool, float, int, list, string, succeed)
+import Json.Decode exposing (Decoder, bool, float, int, list, nullable, string, succeed)
 import Json.Decode.Pipeline exposing (required)
 import RequestHelpers exposing (handleJsonResponse, queryParam)
 import SearchOptions
 import Tab exposing (..)
 import Task exposing (Task)
-import Url exposing (baseUrl)
+import Url exposing (baseUrl, imageUrl)
 
 
 
@@ -22,9 +22,9 @@ type alias Movie =
     , originalLanguage : String
     , originalTitle : String
     , overview : String
-    , posterPath : String
+    , posterPath : Maybe String
     , releaseDate : String
-    , backdropPath : String
+    , backdropPath : Maybe String
     , adult : Bool
     }
 
@@ -147,7 +147,34 @@ movieDecoder =
         |> required "original_language" string
         |> required "original_title" string
         |> required "overview" string
-        |> required "poster_path" string
+        |> required "poster_path" (nullable string)
         |> required "release_date" string
-        |> required "backdrop_path" string
+        |> required "backdrop_path" (nullable string)
         |> required "adult" bool
+
+
+
+-- GETTERS
+
+
+mapSrc : Maybe String -> String
+mapSrc =
+    Maybe.withDefault "" << Maybe.map (\src -> imageUrl ++ src)
+
+
+getPoster : Movie -> String
+getPoster movie =
+    let
+        poster =
+            mapSrc movie.posterPath
+
+        backdrop =
+            mapSrc movie.backdropPath
+
+        defaultImg =
+            ""
+    in
+    [ poster, backdrop, defaultImg ]
+        |> List.filter (\src -> src /= "")
+        |> List.head
+        |> Maybe.withDefault defaultImg

@@ -2,8 +2,8 @@ module MainDB exposing (..)
 
 import Css exposing (..)
 import Genre exposing (Genre, GenresResults)
-import Html.Styled exposing (Html, button, div, h1, header, input, li, span, text)
-import Html.Styled.Attributes exposing (class, css, value)
+import Html.Styled exposing (Html, button, div, h1, h2, header, img, input, span, text)
+import Html.Styled.Attributes exposing (class, css, src, value)
 import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
 import Html.Styled.Keyed
 import Html.Styled.Lazy exposing (lazy)
@@ -186,7 +186,7 @@ view model =
         , button [ class "search-button", onClick Search ] [ text "Search" ]
         , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
         , viewErrorMessage model.errorMessage
-        , Html.Styled.Keyed.node "ul" [ class "results" ] (List.map viewKeyedSearchResult model.results.movies)
+        , Html.Styled.Keyed.node "div" [ class "results" ] (List.map viewKeyedSearchResult model.results.movies)
         , lazy viewPagination { page = model.results.page, total = model.results.totalPages }
         ]
 
@@ -210,9 +210,36 @@ viewKeyedSearchResult movie =
 
 viewSearchResult : Movie -> Html Msg
 viewSearchResult movie =
-    li []
-        [ span [ class "star-count" ] [ text (String.fromFloat movie.rate) ]
-        , span [ class "title" ] [ text movie.title ]
+    div
+        [ css
+            [ displayFlex
+            , justifyContent spaceBetween
+            , margin2 (px 8) zero
+            , height (px 300)
+            ]
+        ]
+        [ div
+            [ css
+                [ width (pct 40)
+                ]
+            ]
+            [ img
+                [ src <| Movie.getPoster movie
+                , css
+                    [ display block
+                    , margin2 zero auto
+                    , height (px 300)
+                    ]
+                ]
+                []
+            ]
+        , div
+            [ css
+                [ width (pct 55)
+                ]
+            ]
+            [ h2 [] [ text movie.title ]
+            ]
         ]
 
 
