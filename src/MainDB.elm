@@ -2,11 +2,11 @@ module MainDB exposing (..)
 
 import Css exposing (..)
 import Genre exposing (Genre, GenresResults)
-import Html.Styled exposing (Html, button, div, h1, h2, header, img, input, span, text)
+import Html.Styled exposing (Html, button, div, h1, h2, header, img, input, p, span, text)
 import Html.Styled.Attributes exposing (class, css, src, value)
 import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
 import Html.Styled.Keyed
-import Html.Styled.Lazy exposing (lazy)
+import Html.Styled.Lazy exposing (lazy, lazy2)
 import Http
 import Json.Decode
 import Movie exposing (Movie, MoviesResults)
@@ -186,7 +186,7 @@ view model =
         , button [ class "search-button", onClick Search ] [ text "Search" ]
         , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
         , viewErrorMessage model.errorMessage
-        , Html.Styled.Keyed.node "div" [ class "results" ] (List.map viewKeyedSearchResult model.results.movies)
+        , Html.Styled.Keyed.node "div" [ class "results" ] (List.map (viewKeyedSearchResult model.genres) model.results.movies)
         , lazy viewPagination { page = model.results.page, total = model.results.totalPages }
         ]
 
@@ -201,21 +201,27 @@ viewErrorMessage errorMessage =
             text ""
 
 
-viewKeyedSearchResult : Movie -> ( String, Html Msg )
-viewKeyedSearchResult movie =
+viewKeyedSearchResult : GenresResults -> Movie -> ( String, Html Msg )
+viewKeyedSearchResult genres movie =
     ( String.fromInt movie.id
-    , lazy viewSearchResult movie
+    , lazy2 viewSearchResult movie genres
     )
 
 
-viewSearchResult : Movie -> Html Msg
-viewSearchResult movie =
+viewSearchResult : Movie -> GenresResults -> Html Msg
+viewSearchResult movie genres =
+    let
+        movieGenres =
+            List.filter (\genre -> List.member genre.id movie.genreIds) genres
+    in
     div
         [ css
             [ displayFlex
             , justifyContent spaceBetween
             , margin2 (px 8) zero
-            , height (px 300)
+            , padding2 (px 16) zero
+            , height (px 332)
+            , boxShadow4 zero (px 4) (px 5) (hex "#eee")
             ]
         ]
         [ div
@@ -238,7 +244,30 @@ viewSearchResult movie =
                 [ width (pct 55)
                 ]
             ]
-            [ h2 [] [ text movie.title ]
+            [ div []
+                [ h2
+                    [ css
+                        [ margin2 (px 8) zero ]
+                    ]
+                    [ text movie.title ]
+                , if movie.title /= movie.originalTitle then
+                    p
+                        [ css
+                            [ margin2 (px 8) zero
+                            , fontStyle italic
+                            , color (hex "#999")
+                            ]
+                        ]
+                        [ text movie.originalTitle ]
+
+                  else
+                    text ""
+                ]
+            , Genre.viewList movieGenres
+
+            -- genres
+            -- overview
+            -- release date  -- in favorite
             ]
         ]
 

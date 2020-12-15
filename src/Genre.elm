@@ -1,8 +1,11 @@
-module Genre exposing (Genre, GenresResults, fetch)
+module Genre exposing (Genre, GenresResults, fetch, viewList)
 
+import Css exposing (..)
+import Html.Styled exposing (Html, div, text)
+import Html.Styled.Attributes exposing (css)
 import Http
 import Json.Decode exposing (Decoder)
-import Json.Decode.Pipeline exposing (required)
+import Json.Decode.Pipeline as DPipeline
 import RequestHelpers exposing (handleJsonResponse, queryParam)
 import Task exposing (Task)
 import Url exposing (baseUrl)
@@ -20,6 +23,34 @@ type alias Genre =
 
 type alias GenresResults =
     List Genre
+
+
+
+-- VIEW
+
+
+viewList : List Genre -> Html msg
+viewList genres =
+    div
+        [ css
+            [ displayFlex
+            , margin2 (px 8) zero
+            ]
+        ]
+        (List.map viewGenreChip genres)
+
+
+viewGenreChip : Genre -> Html msg
+viewGenreChip genre =
+    div
+        [ css
+            [ padding2 (px 4) (px 8)
+            , margin4 zero (px 4) zero zero
+            , borderRadius (px 5)
+            , backgroundColor (hex "#eee")
+            ]
+        ]
+        [ text genre.name ]
 
 
 
@@ -65,11 +96,11 @@ fetch token =
 genresDecoder : Decoder GenresResults
 genresDecoder =
     Json.Decode.succeed identity
-        |> required "genres" (Json.Decode.list genreDecoder)
+        |> DPipeline.required "genres" (Json.Decode.list genreDecoder)
 
 
 genreDecoder : Decoder Genre
 genreDecoder =
     Json.Decode.succeed Genre
-        |> required "id" Json.Decode.int
-        |> required "name" Json.Decode.string
+        |> DPipeline.required "id" Json.Decode.int
+        |> DPipeline.required "name" Json.Decode.string
