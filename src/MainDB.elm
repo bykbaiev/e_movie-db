@@ -182,7 +182,7 @@ update msg model =
                 favoriteMovies =
                     id :: model.favoriteMovies
             in
-            ( { model | favoriteMovies = favoriteMovies }, storeFavoriteMovies favoriteMovies )
+            ( model, storeFavoriteMovies favoriteMovies )
 
         SetFavoriteMovies ids ->
             ( { model | favoriteMovies = ids }, Cmd.none )
@@ -192,7 +192,7 @@ update msg model =
                 favoriteMovies =
                     List.filter (\movieId -> movieId /= id) model.favoriteMovies
             in
-            ( { model | favoriteMovies = favoriteMovies }, storeFavoriteMovies favoriteMovies )
+            ( model, storeFavoriteMovies favoriteMovies )
 
 
 

@@ -35,7 +35,10 @@ app.ports.storeQuery.subscribe((query) => {
 });
 
 app.ports.storeFavoriteMovies.subscribe((movies) => {
-    saveToLocalStorage(KEY.FAVORITE_MOVIES, [...getFromLocalStorage(KEY.FAVORITE_MOVIES, []), ...movies]);
+    const movieList = [...getFromLocalStorage(KEY.FAVORITE_MOVIES, []), ...movies];
+    saveToLocalStorage(KEY.FAVORITE_MOVIES, movieList);
+
+    app.ports.onFavoriteMoviesChange.send(movieList);
 });
 
 window.addEventListener('storage', (event) => {
