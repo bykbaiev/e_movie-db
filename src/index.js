@@ -9,7 +9,7 @@ const KEY = {
 
 const getFromLocalStorage = (name, defaultValue) => {
     if (localStorage && localStorage.getItem) {
-        return localStorage.getItem(name) || defaultValue || '';
+        return JSON.parse(localStorage.getItem(name) || defaultValue || '');
     }
 
     return defaultValue || '';
@@ -17,7 +17,7 @@ const getFromLocalStorage = (name, defaultValue) => {
 
 const saveToLocalStorage = (name, value) => {
     if (localStorage && localStorage.setItem) {
-        localStorage.setItem(name, value);
+        localStorage.setItem(name, JSON.stringify(value));
     }
 };
 
@@ -43,6 +43,6 @@ window.addEventListener('storage', (event) => {
     const { key, newValue } = event;
 
     if (key === KEY.FAVORITE_MOVIES) {
-        app.ports.onFavoriteMoviesChange.send(newValue);
+        app.ports.onFavoriteMoviesChange.send(JSON.parse(newValue));
     }
 });
