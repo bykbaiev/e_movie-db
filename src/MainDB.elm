@@ -16,6 +16,7 @@ import SearchOptions exposing (updateOptions)
 import String
 import Tab exposing (..)
 import Task
+import ViewHelpers
 
 
 
@@ -219,14 +220,15 @@ viewSearchResult movie genres =
             [ displayFlex
             , justifyContent spaceBetween
             , margin2 (px 8) zero
-            , padding2 (px 16) zero
+            , padding (px 16)
             , height (px 332)
             , boxShadow4 zero (px 4) (px 5) (hex "#eee")
             ]
         ]
         [ div
             [ css
-                [ width (pct 40)
+                [ width (pct 35)
+                , overflow hidden
                 ]
             ]
             [ img
@@ -241,7 +243,7 @@ viewSearchResult movie genres =
             ]
         , div
             [ css
-                [ width (pct 55)
+                [ width (pct 60)
                 ]
             ]
             [ div []
@@ -265,8 +267,10 @@ viewSearchResult movie genres =
                 ]
             , Genre.viewList movieGenres
 
-            -- genres
             -- overview
+            , div []
+                [ text <| ViewHelpers.truncateText movie.overview ]
+
             -- release date  -- in favorite
             ]
         ]
