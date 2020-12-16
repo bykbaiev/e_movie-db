@@ -10,7 +10,7 @@ import Html.Styled.Lazy exposing (lazy, lazy2)
 import Http
 import Json.Decode
 import Movie exposing (Movie, MoviesResults)
-import Ports exposing (storeQuery)
+import Ports exposing (onFavoriteMoviesChange, storeFavoriteMovies, storeQuery)
 import RequestHelpers
 import SearchOptions exposing (updateOptions)
 import String
@@ -25,12 +25,14 @@ import Task
 type alias Flags =
     { query : Maybe String
     , apiToken : Maybe String
+    , favoriteMovies : Maybe (List Int)
     }
 
 
 type alias Model =
     { query : String
     , results : MoviesResults
+    , favoriteMovies : List Int
     , errorMessage : Maybe String
     , apiToken : Maybe String
     , searchOptions : SearchOptions.Options
@@ -47,6 +49,9 @@ type Msg
     | SetPage Int
     | SetTab Tab
     | GotGenres (Result Http.Error GenresResults)
+    | SetFavoriteMovie Int
+    | SetFavoriteMovies (List Int)
+    | RemoveFavoriteMovie Int
 
 
 
@@ -62,6 +67,7 @@ initialModel =
         , totalResults = 0
         , totalPages = 0
         }
+    , favoriteMovies = []
     , errorMessage = Nothing
     , apiToken = Nothing
     , searchOptions = SearchOptions.initialModel
@@ -71,7 +77,7 @@ initialModel =
 
 
 init : Flags -> ( Model, Cmd Msg )
-init { query, apiToken } =
+init { query, apiToken, favoriteMovies } =
     let
         initialQuery =
             Maybe.withDefault "" query
@@ -79,6 +85,7 @@ init { query, apiToken } =
     ( { initialModel
         | query = initialQuery
         , apiToken = apiToken
+        , favoriteMovies = Maybe.withDefault [] favoriteMovies
       }
     , Cmd.batch
         [ { tab = initialModel.tab
@@ -169,6 +176,23 @@ update msg model =
 
                 Ok genres ->
                     ( { model | genres = genres, errorMessage = Nothing }, Cmd.none )
+
+        SetFavoriteMovie id ->
+            let
+                favoriteMovies =
+                    id :: model.favoriteMovies
+            in
+            ( { model | favoriteMovies = favoriteMovies }, storeFavoriteMovies favoriteMovies )
+
+        SetFavoriteMovies ids ->
+            ( { model | favoriteMovies = ids }, Cmd.none )
+
+        RemoveFavoriteMovie id ->
+            let
+                favoriteMovies =
+                    List.filter (\movieId -> movieId /= id) model.favoriteMovies
+            in
+            ( { model | favoriteMovies = favoriteMovies }, storeFavoriteMovies favoriteMovies )
 
 
 
@@ -319,6 +343,15 @@ viewPaginationCell selectedPage page =
 viewPaginationSpace : Html msg
 viewPaginationSpace =
     div [] [ text ". . ." ]
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    onFavoriteMoviesChange SetFavoriteMovies
 
 
 

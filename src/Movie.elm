@@ -259,7 +259,7 @@ movieDecoder =
         |> DPipeline.required "original_title" Json.Decode.string
         |> DPipeline.required "overview" Json.Decode.string
         |> DPipeline.required "poster_path" (Json.Decode.nullable Json.Decode.string)
-        |> DPipeline.required "release_date" Json.Decode.string
+        |> DPipeline.optional "release_date" Json.Decode.string "Unknown"
         |> DPipeline.required "backdrop_path" (Json.Decode.nullable Json.Decode.string)
         |> DPipeline.required "adult" Json.Decode.bool
 

@@ -11,5 +11,5 @@ main =
         { init = MainDB.init
         , view = toUnstyled << MainDB.view
         , update = MainDB.update
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = MainDB.subscriptions
         }
