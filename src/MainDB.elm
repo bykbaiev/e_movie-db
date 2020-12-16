@@ -2,8 +2,8 @@ module MainDB exposing (..)
 
 import Css exposing (..)
 import Genre exposing (Genre, GenresResults)
-import Html.Styled exposing (Html, button, div, h1, h2, header, img, input, p, span, text)
-import Html.Styled.Attributes exposing (class, css, src, value)
+import Html.Styled exposing (Html, a, button, div, h1, header, img, input, p, span, text)
+import Html.Styled.Attributes exposing (class, css, href, src, value)
 import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
 import Html.Styled.Keyed
 import Html.Styled.Lazy exposing (lazy, lazy2)
@@ -178,10 +178,34 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    div [ class "content" ]
-        [ header []
+    div
+        [ css
+            [ width (px 960)
+            , margin2 zero auto
+            , padding2 (px 32) zero
+            , fontFamilies [ "Helvetica", "Arial", "serif" ]
+            ]
+        ]
+        [ header
+            [ css
+                [ position relative
+                , padding2 (px 8) (px 16)
+                , backgroundColor (rgb 96 181 204)
+                , height (px 36)
+                ]
+            ]
             [ h1 [] [ text "MovieDB" ]
-            , span [ class "tagline" ] [ text "Search for the movies accross different databases" ]
+            , span
+                [ css
+                    [ position absolute
+                    , top (px 16)
+                    , right (px 16)
+                    , fontStyle italic
+                    , fontSize (px 24)
+                    , backgroundColor (hex "#eee")
+                    ]
+                ]
+                [ text "Search for the movies accross different databases" ]
             ]
         , input [ class "search-query", onInput SetQuery, value model.query, onEnter Search ] []
         , button [ class "search-button", onClick Search ] [ text "Search" ]
@@ -243,13 +267,17 @@ viewSearchResult movie genres =
             ]
         , div
             [ css
-                [ width (pct 60)
+                [ position relative
+                , width (pct 65)
                 ]
             ]
             [ div []
-                [ h2
-                    [ css
-                        [ margin2 (px 8) zero ]
+                [ a
+                    [ href "#"
+                    , css
+                        [ margin2 (px 8) zero
+                        , fontSize (px 18)
+                        ]
                     ]
                     [ text movie.title ]
                 , if movie.title /= movie.originalTitle then
@@ -266,12 +294,33 @@ viewSearchResult movie genres =
                     text ""
                 ]
             , Genre.viewList movieGenres
-
-            -- overview
-            , div []
+            , div [ css [ textAlign justify ] ]
                 [ text <| ViewHelpers.truncateText movie.overview ]
-
-            -- release date  -- in favorite
+            , div
+                [ css
+                    [ displayFlex
+                    , justifyContent spaceBetween
+                    , alignItems center
+                    , position absolute
+                    , right zero
+                    , bottom zero
+                    , left zero
+                    ]
+                ]
+                [ div
+                    [ css
+                        [ displayFlex
+                        , alignItems center
+                        ]
+                    ]
+                    [ div
+                        [ css [ marginRight (px 8) ] ]
+                        [ text <| "Rate: " ++ String.fromFloat movie.rate ]
+                    , div []
+                        [ text <| "Release date: " ++ movie.releaseDate ]
+                    ]
+                , div [] [ text "Is favorite?" ]
+                ]
             ]
         ]
 
