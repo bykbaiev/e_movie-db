@@ -16,7 +16,6 @@ import SearchOptions exposing (updateOptions)
 import String
 import Tab exposing (..)
 import Task
-import ViewHelpers
 
 
 
@@ -229,100 +228,8 @@ viewErrorMessage errorMessage =
 viewKeyedSearchResult : GenresResults -> Movie -> ( String, Html Msg )
 viewKeyedSearchResult genres movie =
     ( String.fromInt movie.id
-    , lazy2 viewSearchResult movie genres
+    , lazy2 Movie.view movie genres
     )
-
-
-viewSearchResult : Movie -> GenresResults -> Html Msg
-viewSearchResult movie genres =
-    let
-        movieGenres =
-            List.filter (\genre -> List.member genre.id movie.genreIds) genres
-    in
-    div
-        [ css
-            [ displayFlex
-            , justifyContent spaceBetween
-            , margin2 (px 8) zero
-            , padding (px 16)
-            , height (px 332)
-            , boxShadow4 zero (px 4) (px 5) (hex "#eee")
-            ]
-        ]
-        [ div
-            [ css
-                [ width (pct 35)
-                , overflow hidden
-                ]
-            ]
-            [ img
-                [ src <| Movie.getPoster movie
-                , css
-                    [ display block
-                    , margin2 zero auto
-                    , height (px 300)
-                    ]
-                ]
-                []
-            ]
-        , div
-            [ css
-                [ position relative
-                , width (pct 65)
-                ]
-            ]
-            [ div []
-                [ a
-                    [ href "#"
-                    , css
-                        [ margin2 (px 8) zero
-                        , fontSize (px 18)
-                        ]
-                    ]
-                    [ text movie.title ]
-                , if movie.title /= movie.originalTitle then
-                    p
-                        [ css
-                            [ margin2 (px 8) zero
-                            , fontStyle italic
-                            , color (hex "#999")
-                            ]
-                        ]
-                        [ text movie.originalTitle ]
-
-                  else
-                    text ""
-                ]
-            , Genre.viewList movieGenres
-            , div [ css [ textAlign justify ] ]
-                [ text <| ViewHelpers.truncateText movie.overview ]
-            , div
-                [ css
-                    [ displayFlex
-                    , justifyContent spaceBetween
-                    , alignItems center
-                    , position absolute
-                    , right zero
-                    , bottom zero
-                    , left zero
-                    ]
-                ]
-                [ div
-                    [ css
-                        [ displayFlex
-                        , alignItems center
-                        ]
-                    ]
-                    [ div
-                        [ css [ marginRight (px 8) ] ]
-                        [ text <| "Rate: " ++ String.fromFloat movie.rate ]
-                    , div []
-                        [ text <| "Release date: " ++ movie.releaseDate ]
-                    ]
-                , div [] [ text "Is favorite?" ]
-                ]
-            ]
-        ]
 
 
 viewPagination : { page : Int, total : Int } -> Html Msg

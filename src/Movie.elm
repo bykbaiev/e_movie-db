@@ -1,13 +1,21 @@
-module Movie exposing (Movie, MoviesResults, fetch, getPoster)
+module Movie exposing (Movie, MoviesResults, fetch, getPoster, view)
 
+import Css exposing (..)
+import DateFormat
+import Genre exposing (GenresResults)
+import Html.Styled exposing (Html, a, div, img, p, text)
+import Html.Styled.Attributes exposing (css, href, src)
 import Http
-import Json.Decode exposing (Decoder, bool, float, int, list, nullable, string, succeed)
-import Json.Decode.Pipeline exposing (required)
+import Iso8601 exposing (toTime)
+import Json.Decode exposing (Decoder, succeed)
+import Json.Decode.Pipeline as DPipeline
 import RequestHelpers exposing (handleJsonResponse, queryParam)
 import SearchOptions
-import Tab exposing (..)
+import Tab exposing (Tab(..))
 import Task exposing (Task)
+import Time
 import Url exposing (baseUrl, imageUrl)
+import ViewHelpers
 
 
 
@@ -35,6 +43,109 @@ type alias MoviesResults =
     , totalPages : Int
     , totalResults : Int
     }
+
+
+
+-- VIEW
+
+
+view : Movie -> GenresResults -> Html msg
+view movie genres =
+    let
+        movieGenres =
+            List.filter (\genre -> List.member genre.id movie.genreIds) genres
+
+        movieReleaseDate =
+            movie.releaseDate
+                |> toTime
+                |> Result.toMaybe
+                |> Maybe.map (DateFormat.format "dd MMM yyyy" Time.utc)
+                |> Maybe.withDefault "Unknown"
+    in
+    div
+        [ css
+            [ displayFlex
+            , justifyContent spaceBetween
+            , margin2 (px 8) zero
+            , padding (px 16)
+            , height (px 332)
+            , boxShadow4 zero (px 4) (px 5) (hex "#eee")
+            ]
+        ]
+        [ div
+            [ css
+                [ width (pct 35)
+                , overflow hidden
+                ]
+            ]
+            [ img
+                [ src <| getPoster movie
+                , css
+                    [ display block
+                    , margin2 zero auto
+                    , height (px 300)
+                    ]
+                ]
+                []
+            ]
+        , div
+            [ css
+                [ position relative
+                , width (pct 65)
+                ]
+            ]
+            [ div []
+                [ a
+                    [ href "#"
+                    , css
+                        [ margin2 (px 8) zero
+                        , fontSize (px 18)
+                        ]
+                    ]
+                    [ text movie.title ]
+                , if movie.title /= movie.originalTitle then
+                    p
+                        [ css
+                            [ margin2 (px 8) zero
+                            , fontStyle italic
+                            , color (hex "#999")
+                            ]
+                        ]
+                        [ text movie.originalTitle ]
+
+                  else
+                    text ""
+                ]
+            , Genre.viewList movieGenres
+            , div [ css [ textAlign justify ] ]
+                [ text <| ViewHelpers.truncateText movie.overview ]
+            , div
+                [ css
+                    [ displayFlex
+                    , justifyContent spaceBetween
+                    , alignItems center
+                    , position absolute
+                    , right zero
+                    , bottom zero
+                    , left zero
+                    ]
+                ]
+                [ div
+                    [ css
+                        [ displayFlex
+                        , alignItems center
+                        ]
+                    ]
+                    [ div
+                        [ css [ marginRight (px 8) ] ]
+                        [ text <| "Rate: " ++ String.fromFloat movie.rate ]
+                    , div []
+                        [ text <| "Release date: " ++ movieReleaseDate ]
+                    ]
+                , div [] [ text "Is favorite?" ]
+                ]
+            ]
+        ]
 
 
 
@@ -131,26 +242,26 @@ fetch { tab, token, query, options, page } =
 moviesDecoder : Decoder MoviesResults
 moviesDecoder =
     succeed MoviesResults
-        |> required "results" (list movieDecoder)
-        |> required "page" int
-        |> required "total_pages" int
-        |> required "total_results" int
+        |> DPipeline.required "results" (Json.Decode.list movieDecoder)
+        |> DPipeline.required "page" Json.Decode.int
+        |> DPipeline.required "total_pages" Json.Decode.int
+        |> DPipeline.required "total_results" Json.Decode.int
 
 
 movieDecoder : Decoder Movie
 movieDecoder =
     succeed Movie
-        |> required "id" int
-        |> required "title" string
-        |> required "vote_average" float
-        |> required "genre_ids" (list int)
-        |> required "original_language" string
-        |> required "original_title" string
-        |> required "overview" string
-        |> required "poster_path" (nullable string)
-        |> required "release_date" string
-        |> required "backdrop_path" (nullable string)
-        |> required "adult" bool
+        |> DPipeline.required "id" Json.Decode.int
+        |> DPipeline.required "title" Json.Decode.string
+        |> DPipeline.required "vote_average" Json.Decode.float
+        |> DPipeline.required "genre_ids" (Json.Decode.list Json.Decode.int)
+        |> DPipeline.required "original_language" Json.Decode.string
+        |> DPipeline.required "original_title" Json.Decode.string
+        |> DPipeline.required "overview" Json.Decode.string
+        |> DPipeline.required "poster_path" (Json.Decode.nullable Json.Decode.string)
+        |> DPipeline.required "release_date" Json.Decode.string
+        |> DPipeline.required "backdrop_path" (Json.Decode.nullable Json.Decode.string)
+        |> DPipeline.required "adult" Json.Decode.bool
 
 
 
