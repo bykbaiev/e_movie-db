@@ -42,7 +42,6 @@ app.ports.storeFavoriteMovies.subscribe((movies) => {
 });
 
 window.addEventListener('storage', (event) => {
-    console.log({ event });
     const { key, newValue } = event;
 
     if (key === KEY.FAVORITE_MOVIES) {
