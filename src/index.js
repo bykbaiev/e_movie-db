@@ -9,7 +9,7 @@ const KEY = {
 
 const getFromLocalStorage = (name, defaultValue) => {
     if (localStorage && localStorage.getItem) {
-        return JSON.parse(localStorage.getItem(name) || defaultValue || '');
+        return JSON.parse(localStorage.getItem(name) || defaultValue || null);
     }
 
     return defaultValue || '';
@@ -26,7 +26,7 @@ const app = Elm.Main.init({
     flags: {
         query: getFromLocalStorage(KEY.QUERY),
         apiToken: process.env.API_TOKEN,
-        favoriteMovies: getFromLocalStorage(KEY.FAVORITE_MOVIES, [])
+        favoriteMovies: getFromLocalStorage(KEY.FAVORITE_MOVIES, '[]')
     }
 });
 
@@ -35,7 +35,7 @@ app.ports.storeQuery.subscribe((query) => {
 });
 
 app.ports.storeFavoriteMovies.subscribe((movies) => {
-    const movieList = [...getFromLocalStorage(KEY.FAVORITE_MOVIES, []), ...movies];
+    const movieList = [...getFromLocalStorage(KEY.FAVORITE_MOVIES, '[]'), ...movies];
     saveToLocalStorage(KEY.FAVORITE_MOVIES, movieList);
 
     app.ports.onFavoriteMoviesChange.send(movieList);
