@@ -1,4 +1,4 @@
-module Movie exposing (Movie, MoviesResults, fetch, getPoster, view)
+module Movie exposing (PreviewMovie, PreviewMoviesResults, fetch, getPoster, id, view)
 
 import Css exposing (..)
 import DateFormat
@@ -22,7 +22,11 @@ import ViewHelpers
 -- TYPES
 
 
-type alias Movie =
+type Movie extraInfo
+    = Movie Internals extraInfo
+
+
+type alias Internals =
     { id : Int
     , title : String
     , rate : Float
@@ -37,8 +41,16 @@ type alias Movie =
     }
 
 
-type alias MoviesResults =
-    { movies : List Movie
+type Preview
+    = Preview
+
+
+type alias PreviewMovie =
+    Movie Preview
+
+
+type alias PreviewMoviesResults =
+    { movies : List PreviewMovie
     , page : Int
     , totalPages : Int
     , totalResults : Int
@@ -49,14 +61,17 @@ type alias MoviesResults =
 -- VIEW
 
 
-view : Movie -> GenresResults -> Html msg
+view : Movie a -> GenresResults -> Html msg
 view movie genres =
     let
+        (Movie internals _) =
+            movie
+
         movieGenres =
-            List.filter (\genre -> List.member genre.id movie.genreIds) genres
+            List.filter (\genre -> List.member genre.id internals.genreIds) genres
 
         movieReleaseDate =
-            movie.releaseDate
+            internals.releaseDate
                 |> toTime
                 |> Result.toMaybe
                 |> Maybe.map (DateFormat.format "dd MMM yyyy" Time.utc)
@@ -102,8 +117,8 @@ view movie genres =
                         , fontSize (px 18)
                         ]
                     ]
-                    [ text movie.title ]
-                , if movie.title /= movie.originalTitle then
+                    [ text internals.title ]
+                , if internals.title /= internals.originalTitle then
                     p
                         [ css
                             [ margin2 (px 8) zero
@@ -111,14 +126,14 @@ view movie genres =
                             , color (hex "#999")
                             ]
                         ]
-                        [ text movie.originalTitle ]
+                        [ text internals.originalTitle ]
 
                   else
                     text ""
                 ]
             , Genre.viewList movieGenres
             , div [ css [ textAlign justify ] ]
-                [ text <| ViewHelpers.truncateText movie.overview ]
+                [ text <| ViewHelpers.truncateText internals.overview ]
             , div
                 [ css
                     [ displayFlex
@@ -138,7 +153,7 @@ view movie genres =
                     ]
                     [ div
                         [ css [ marginRight (px 8) ] ]
-                        [ text <| "Rate: " ++ String.fromFloat movie.rate ]
+                        [ text <| "Rate: " ++ String.fromFloat internals.rate ]
                     , div []
                         [ text <| "Release date: " ++ movieReleaseDate ]
                     ]
@@ -152,7 +167,7 @@ view movie genres =
 -- FETCH MOVIES
 
 
-fetch : { tab : Tab, token : Maybe String, query : String, options : SearchOptions.Options, page : Int } -> Task Http.Error MoviesResults
+fetch : { tab : Tab, token : Maybe String, query : String, options : SearchOptions.Options, page : Int } -> Task Http.Error PreviewMoviesResults
 fetch { tab, token, query, options, page } =
     let
         isMissingToken =
@@ -230,7 +245,7 @@ fetch { tab, token, query, options, page } =
             , headers = []
             , url = url
             , body = Http.emptyBody
-            , resolver = Http.stringResolver <| handleJsonResponse <| moviesDecoder
+            , resolver = Http.stringResolver <| handleJsonResponse <| previewMoviesDecoder
             , timeout = Nothing
             }
 
@@ -239,18 +254,28 @@ fetch { tab, token, query, options, page } =
 -- SERIALIZATION
 
 
-moviesDecoder : Decoder MoviesResults
-moviesDecoder =
-    succeed MoviesResults
-        |> DPipeline.required "results" (Json.Decode.list movieDecoder)
+previewMoviesDecoder : Decoder PreviewMoviesResults
+previewMoviesDecoder =
+    succeed PreviewMoviesResults
+        |> DPipeline.required "results" (Json.Decode.list previewMovieDecoder)
         |> DPipeline.required "page" Json.Decode.int
         |> DPipeline.required "total_pages" Json.Decode.int
         |> DPipeline.required "total_results" Json.Decode.int
 
 
-movieDecoder : Decoder Movie
-movieDecoder =
-    succeed Movie
+movieDecoder : (Internals -> Movie a) -> Decoder (Movie a)
+movieDecoder mapper =
+    Json.Decode.map mapper internalsDecoder
+
+
+previewMovieDecoder : Decoder (Movie Preview)
+previewMovieDecoder =
+    movieDecoder (\internals -> Movie internals Preview)
+
+
+internalsDecoder : Decoder Internals
+internalsDecoder =
+    succeed Internals
         |> DPipeline.required "id" Json.Decode.int
         |> DPipeline.required "title" Json.Decode.string
         |> DPipeline.required "vote_average" Json.Decode.float
@@ -273,14 +298,14 @@ mapSrc =
     Maybe.withDefault "" << Maybe.map (\src -> imageUrl ++ src)
 
 
-getPoster : Movie -> String
-getPoster movie =
+getPoster : Movie a -> String
+getPoster (Movie internals _) =
     let
         poster =
-            mapSrc movie.posterPath
+            mapSrc internals.posterPath
 
         backdrop =
-            mapSrc movie.backdropPath
+            mapSrc internals.backdropPath
 
         defaultImg =
             ""
@@ -289,3 +314,8 @@ getPoster movie =
         |> List.filter (\src -> src /= "")
         |> List.head
         |> Maybe.withDefault defaultImg
+
+
+id : Movie a -> Int
+id (Movie internals _) =
+    internals.id

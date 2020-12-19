@@ -9,7 +9,7 @@ import Html.Styled.Keyed
 import Html.Styled.Lazy exposing (lazy, lazy2)
 import Http
 import Json.Decode
-import Movie exposing (Movie, MoviesResults)
+import Movie exposing (PreviewMovie, PreviewMoviesResults)
 import Ports exposing (onFavoriteMoviesChange, storeFavoriteMovies, storeQuery)
 import RequestHelpers
 import SearchOptions exposing (updateOptions)
@@ -31,7 +31,7 @@ type alias Flags =
 
 type alias Model =
     { query : String
-    , results : MoviesResults
+    , results : PreviewMoviesResults
     , favoriteMovies : List Int
     , errorMessage : Maybe String
     , apiToken : Maybe String
@@ -44,7 +44,7 @@ type alias Model =
 type Msg
     = SetQuery String
     | Search
-    | GotMovies (Result Http.Error MoviesResults)
+    | GotMovies (Result Http.Error PreviewMoviesResults)
     | Options SearchOptions.Msg
     | SetPage Int
     | SetTab Tab
@@ -158,8 +158,8 @@ update msg model =
                 |> Task.attempt GotMovies
             )
 
-        GotMovies moviesResults ->
-            case moviesResults of
+        GotMovies previewMoviesResults ->
+            case previewMoviesResults of
                 Err error ->
                     ( { model | errorMessage = Just <| RequestHelpers.toString error }, Cmd.none )
 
@@ -249,9 +249,9 @@ viewErrorMessage errorMessage =
             text ""
 
 
-viewKeyedSearchResult : GenresResults -> Movie -> ( String, Html Msg )
+viewKeyedSearchResult : GenresResults -> PreviewMovie -> ( String, Html Msg )
 viewKeyedSearchResult genres movie =
-    ( String.fromInt movie.id
+    ( String.fromInt <| Movie.id movie
     , lazy2 Movie.view movie genres
     )
 
