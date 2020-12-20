@@ -10,8 +10,9 @@ import Http
 import Iso8601 exposing (toTime)
 import Json.Decode exposing (Decoder, succeed)
 import Json.Decode.Pipeline as DPipeline
+import MovieId exposing (MovieId)
 import RequestHelpers exposing (handleJsonResponse, queryParam)
-import SearchOptions exposing (Msg)
+import SearchOptions
 import Tab exposing (Tab(..))
 import Task exposing (Task)
 import Time
@@ -28,7 +29,7 @@ type Movie extraInfo
 
 
 type alias Internals =
-    { id : Int
+    { id : MovieId
     , title : String
     , rate : Float
     , genreIds : List Int
@@ -62,7 +63,7 @@ type alias PreviewMoviesResults =
 -- VIEW
 
 
-view : Movie a -> GenresResults -> List Int -> (Int -> msg) -> (Int -> msg) -> Html msg
+view : Movie a -> GenresResults -> List MovieId -> (MovieId -> msg) -> (MovieId -> msg) -> Html msg
 view movie genres favoriteMovies addToFavorites removeFromFavorites =
     let
         (Movie internals _) =
@@ -171,12 +172,12 @@ view movie genres favoriteMovies addToFavorites removeFromFavorites =
         ]
 
 
-viewAddToFavoriteButton : Int -> (Int -> msg) -> Html msg
+viewAddToFavoriteButton : MovieId -> (MovieId -> msg) -> Html msg
 viewAddToFavoriteButton movieId toMsg =
     button [ onClick <| toMsg movieId ] [ text "Add to favorites" ]
 
 
-viewRemoveFromFavoriteButton : Int -> (Int -> msg) -> Html msg
+viewRemoveFromFavoriteButton : MovieId -> (MovieId -> msg) -> Html msg
 viewRemoveFromFavoriteButton movieId toMsg =
     button [ onClick <| toMsg movieId ] [ text "Remove from favorites" ]
 
@@ -294,7 +295,7 @@ previewMovieDecoder =
 internalsDecoder : Decoder Internals
 internalsDecoder =
     succeed Internals
-        |> DPipeline.required "id" Json.Decode.int
+        |> DPipeline.required "id" MovieId.decoder
         |> DPipeline.required "title" Json.Decode.string
         |> DPipeline.required "vote_average" Json.Decode.float
         |> DPipeline.required "genre_ids" (Json.Decode.list Json.Decode.int)
@@ -334,6 +335,6 @@ getPoster (Movie internals _) =
         |> Maybe.withDefault defaultImg
 
 
-id : Movie a -> Int
+id : Movie a -> MovieId
 id (Movie internals _) =
     internals.id

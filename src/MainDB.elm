@@ -1,4 +1,12 @@
-module MainDB exposing (..)
+module MainDB exposing
+    ( Flags
+    , Model
+    , Msg
+    , init
+    , subscriptions
+    , update
+    , view
+    )
 
 import Css exposing (..)
 import Genre exposing (Genre, GenresResults)
@@ -10,6 +18,7 @@ import Html.Styled.Lazy exposing (lazy, lazy5)
 import Http
 import Json.Decode
 import Movie exposing (PreviewMovie, PreviewMoviesResults)
+import MovieId exposing (MovieId)
 import Ports exposing (onFavoriteMoviesChange, storeFavoriteMovies, storeQuery)
 import RequestHelpers
 import SearchOptions exposing (updateOptions)
@@ -32,7 +41,7 @@ type alias Flags =
 type alias Model =
     { query : String
     , results : PreviewMoviesResults
-    , favoriteMovies : List Int
+    , favoriteMovies : List MovieId
     , errorMessage : Maybe String
     , apiToken : Maybe String
     , searchOptions : SearchOptions.Options
@@ -49,9 +58,9 @@ type Msg
     | SetPage Int
     | SetTab Tab
     | GotGenres (Result Http.Error GenresResults)
-    | SetFavoriteMovie Int
-    | SetFavoriteMovies (List Int)
-    | RemoveFavoriteMovie Int
+    | SetFavoriteMovie MovieId
+    | SetFavoriteMovies (List MovieId)
+    | RemoveFavoriteMovie MovieId
 
 
 
@@ -85,7 +94,10 @@ init { query, apiToken, favoriteMovies } =
     ( { initialModel
         | query = initialQuery
         , apiToken = apiToken
-        , favoriteMovies = Maybe.withDefault [] favoriteMovies
+        , favoriteMovies =
+            favoriteMovies
+                |> Maybe.map (List.map MovieId.fromInt)
+                |> Maybe.withDefault []
       }
     , Cmd.batch
         [ { tab = initialModel.tab
@@ -182,7 +194,7 @@ update msg model =
                 favoriteMovies =
                     id :: model.favoriteMovies
             in
-            ( model, storeFavoriteMovies favoriteMovies )
+            ( model, storeFavorite favoriteMovies )
 
         SetFavoriteMovies ids ->
             ( { model | favoriteMovies = ids }, Cmd.none )
@@ -192,7 +204,12 @@ update msg model =
                 favoriteMovies =
                     List.filter (\movieId -> movieId /= id) model.favoriteMovies
             in
-            ( model, storeFavoriteMovies favoriteMovies )
+            ( model, storeFavorite favoriteMovies )
+
+
+storeFavorite : List MovieId -> Cmd Msg
+storeFavorite ids =
+    storeFavoriteMovies <| List.map MovieId.toInt ids
 
 
 
@@ -249,9 +266,9 @@ viewErrorMessage errorMessage =
             text ""
 
 
-viewKeyedSearchResult : GenresResults -> List Int -> PreviewMovie -> ( String, Html Msg )
+viewKeyedSearchResult : GenresResults -> List MovieId -> PreviewMovie -> ( String, Html Msg )
 viewKeyedSearchResult genres favoriteMovies movie =
-    ( String.fromInt <| Movie.id movie
+    ( MovieId.toString <| Movie.id movie
     , lazy5 Movie.view movie genres favoriteMovies SetFavoriteMovie RemoveFavoriteMovie
     )
 
@@ -351,7 +368,7 @@ viewPaginationSpace =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    onFavoriteMoviesChange SetFavoriteMovies
+    onFavoriteMoviesChange (SetFavoriteMovies << List.map MovieId.fromInt)
 
 
 
