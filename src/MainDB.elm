@@ -6,7 +6,7 @@ import Html.Styled exposing (Html, a, button, div, h1, header, img, input, p, sp
 import Html.Styled.Attributes exposing (class, css, href, src, value)
 import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
 import Html.Styled.Keyed
-import Html.Styled.Lazy exposing (lazy, lazy2)
+import Html.Styled.Lazy exposing (lazy, lazy5)
 import Http
 import Json.Decode
 import Movie exposing (PreviewMovie, PreviewMoviesResults)
@@ -234,7 +234,7 @@ view model =
         , button [ class "search-button", onClick Search ] [ text "Search" ]
         , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
         , viewErrorMessage model.errorMessage
-        , Html.Styled.Keyed.node "div" [ class "results" ] (List.map (viewKeyedSearchResult model.genres) model.results.movies)
+        , Html.Styled.Keyed.node "div" [ class "results" ] (List.map (viewKeyedSearchResult model.genres model.favoriteMovies) model.results.movies)
         , lazy viewPagination { page = model.results.page, total = model.results.totalPages }
         ]
 
@@ -249,10 +249,10 @@ viewErrorMessage errorMessage =
             text ""
 
 
-viewKeyedSearchResult : GenresResults -> PreviewMovie -> ( String, Html Msg )
-viewKeyedSearchResult genres movie =
+viewKeyedSearchResult : GenresResults -> List Int -> PreviewMovie -> ( String, Html Msg )
+viewKeyedSearchResult genres favoriteMovies movie =
     ( String.fromInt <| Movie.id movie
-    , lazy2 Movie.view movie genres
+    , lazy5 Movie.view movie genres favoriteMovies SetFavoriteMovie RemoveFavoriteMovie
     )
 
 

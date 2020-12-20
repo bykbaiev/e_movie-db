@@ -3,14 +3,15 @@ module Movie exposing (PreviewMovie, PreviewMoviesResults, fetch, getPoster, id,
 import Css exposing (..)
 import DateFormat
 import Genre exposing (GenresResults)
-import Html.Styled exposing (Html, a, div, img, p, text)
+import Html.Styled exposing (Html, a, button, div, img, p, text)
 import Html.Styled.Attributes exposing (css, href, src)
+import Html.Styled.Events exposing (onClick)
 import Http
 import Iso8601 exposing (toTime)
 import Json.Decode exposing (Decoder, succeed)
 import Json.Decode.Pipeline as DPipeline
 import RequestHelpers exposing (handleJsonResponse, queryParam)
-import SearchOptions
+import SearchOptions exposing (Msg)
 import Tab exposing (Tab(..))
 import Task exposing (Task)
 import Time
@@ -61,8 +62,8 @@ type alias PreviewMoviesResults =
 -- VIEW
 
 
-view : Movie a -> GenresResults -> Html msg
-view movie genres =
+view : Movie a -> GenresResults -> List Int -> (Int -> msg) -> (Int -> msg) -> Html msg
+view movie genres favoriteMovies addToFavorites removeFromFavorites =
     let
         (Movie internals _) =
             movie
@@ -76,6 +77,9 @@ view movie genres =
                 |> Result.toMaybe
                 |> Maybe.map (DateFormat.format "dd MMM yyyy" Time.utc)
                 |> Maybe.withDefault "Unknown"
+
+        isFavorite =
+            List.any (\movieId -> movieId == internals.id) favoriteMovies
     in
     div
         [ css
@@ -157,10 +161,24 @@ view movie genres =
                     , div []
                         [ text <| "Release date: " ++ movieReleaseDate ]
                     ]
-                , div [] [ text "Is favorite?" ]
+                , if isFavorite then
+                    viewRemoveFromFavoriteButton internals.id removeFromFavorites
+
+                  else
+                    viewAddToFavoriteButton internals.id addToFavorites
                 ]
             ]
         ]
+
+
+viewAddToFavoriteButton : Int -> (Int -> msg) -> Html msg
+viewAddToFavoriteButton movieId toMsg =
+    button [ onClick <| toMsg movieId ] [ text "Add to favorites" ]
+
+
+viewRemoveFromFavoriteButton : Int -> (Int -> msg) -> Html msg
+viewRemoveFromFavoriteButton movieId toMsg =
+    button [ onClick <| toMsg movieId ] [ text "Remove from favorites" ]
 
 
 
