@@ -1,22 +1,18 @@
-module Movie exposing (PreviewMovie, PreviewMoviesResults, fetch, getPoster, id, view)
+module Movie exposing (PreviewMovie, id, previewDecoder, view)
 
+import Api
 import Css exposing (..)
 import DateFormat
 import Genre exposing (GenresResults)
 import Html.Styled exposing (Html, a, button, div, img, p, text)
 import Html.Styled.Attributes exposing (css, href, src)
 import Html.Styled.Events exposing (onClick)
-import Http
 import Iso8601 exposing (toTime)
-import Json.Decode exposing (Decoder, succeed)
-import Json.Decode.Pipeline as DPipeline
+import Json.Decode as D exposing (Decoder, succeed)
+import Json.Decode.Pipeline as DP
 import MovieId exposing (MovieId)
-import RequestHelpers exposing (handleJsonResponse, queryParam)
-import SearchOptions
-import Tab exposing (Tab(..))
 import Task exposing (Task)
 import Time
-import Url exposing (baseUrl, imageUrl)
 import ViewHelpers
 
 
@@ -49,14 +45,6 @@ type Preview
 
 type alias PreviewMovie =
     Movie Preview
-
-
-type alias PreviewMoviesResults =
-    { movies : List PreviewMovie
-    , page : Int
-    , totalPages : Int
-    , totalResults : Int
-    }
 
 
 
@@ -99,7 +87,7 @@ view movie genres favoriteMovies addToFavorites removeFromFavorites =
                 ]
             ]
             [ img
-                [ src <| getPoster movie
+                [ src <| poster movie
                 , css
                     [ display block
                     , margin2 zero auto
@@ -183,129 +171,33 @@ viewRemoveFromFavoriteButton movieId toMsg =
 
 
 
--- FETCH MOVIES
-
-
-fetch : { tab : Tab, token : Maybe String, query : String, options : SearchOptions.Options, page : Int } -> Task Http.Error PreviewMoviesResults
-fetch { tab, token, query, options, page } =
-    let
-        isMissingToken =
-            token
-                |> Maybe.map (\t -> t == "")
-                |> Maybe.withDefault True
-
-        tokenQuery =
-            queryParam
-                { name = "api_key"
-                , value = Maybe.withDefault "" token
-                , isFirst = True
-                }
-
-        searchQuery =
-            queryParam
-                { name = "query"
-                , value = query
-                , isFirst = False
-                }
-
-        regionQuery =
-            queryParam
-                { name = "region"
-                , value = Maybe.withDefault "" options.region
-                , isFirst = False
-                }
-
-        languageQuery =
-            queryParam
-                { name = "language"
-                , value = Maybe.withDefault "" options.language
-                , isFirst = False
-                }
-
-        pageQuery =
-            queryParam
-                { name = "page"
-                , value = String.fromInt page
-                , isFirst = False
-                }
-
-        url =
-            case tab of
-                Main ->
-                    if query /= "" then
-                        baseUrl
-                            ++ "search/movie"
-                            ++ tokenQuery
-                            ++ searchQuery
-                            ++ regionQuery
-                            ++ languageQuery
-                            ++ pageQuery
-
-                    else
-                        baseUrl
-                            ++ "movie/top_rated"
-                            ++ tokenQuery
-                            ++ regionQuery
-                            ++ languageQuery
-                            ++ pageQuery
-
-                Favorite ->
-                    ""
-
-                Recommendations ->
-                    ""
-    in
-    if isMissingToken then
-        Task.fail <| Http.BadUrl "Missing API token"
-
-    else
-        Http.task
-            { method = "GET"
-            , headers = []
-            , url = url
-            , body = Http.emptyBody
-            , resolver = Http.stringResolver <| handleJsonResponse <| previewMoviesDecoder
-            , timeout = Nothing
-            }
-
-
-
 -- SERIALIZATION
 
 
-previewMoviesDecoder : Decoder PreviewMoviesResults
-previewMoviesDecoder =
-    succeed PreviewMoviesResults
-        |> DPipeline.required "results" (Json.Decode.list previewMovieDecoder)
-        |> DPipeline.required "page" Json.Decode.int
-        |> DPipeline.required "total_pages" Json.Decode.int
-        |> DPipeline.required "total_results" Json.Decode.int
+decoder : (Internals -> Movie a) -> Decoder (Movie a)
+decoder mapper =
+    D.map mapper internalsDecoder
 
 
-movieDecoder : (Internals -> Movie a) -> Decoder (Movie a)
-movieDecoder mapper =
-    Json.Decode.map mapper internalsDecoder
-
-
-previewMovieDecoder : Decoder (Movie Preview)
-previewMovieDecoder =
-    movieDecoder (\internals -> Movie internals Preview)
+previewDecoder : Decoder (Movie Preview)
+previewDecoder =
+    decoder (\internals -> Movie internals Preview)
 
 
 internalsDecoder : Decoder Internals
 internalsDecoder =
     succeed Internals
-        |> DPipeline.required "id" MovieId.decoder
-        |> DPipeline.required "title" Json.Decode.string
-        |> DPipeline.required "vote_average" Json.Decode.float
-        |> DPipeline.required "genre_ids" (Json.Decode.list Json.Decode.int)
-        |> DPipeline.required "original_language" Json.Decode.string
-        |> DPipeline.required "original_title" Json.Decode.string
-        |> DPipeline.required "overview" Json.Decode.string
-        |> DPipeline.required "poster_path" (Json.Decode.nullable Json.Decode.string)
-        |> DPipeline.optional "release_date" Json.Decode.string "Unknown"
-        |> DPipeline.required "backdrop_path" (Json.Decode.nullable Json.Decode.string)
-        |> DPipeline.required "adult" Json.Decode.bool
+        |> DP.required "id" MovieId.decoder
+        |> DP.required "title" D.string
+        |> DP.required "vote_average" D.float
+        |> DP.required "genre_ids" (D.list D.int)
+        |> DP.required "original_language" D.string
+        |> DP.required "original_title" D.string
+        |> DP.required "overview" D.string
+        |> DP.required "poster_path" (D.nullable D.string)
+        |> DP.optional "release_date" D.string "Unknown"
+        |> DP.required "backdrop_path" (D.nullable D.string)
+        |> DP.required "adult" D.bool
 
 
 
@@ -314,13 +206,17 @@ internalsDecoder =
 
 mapSrc : Maybe String -> String
 mapSrc =
-    Maybe.withDefault "" << Maybe.map (\src -> imageUrl ++ src)
+    Maybe.withDefault "" << Maybe.map ((++) Api.imageUrl)
 
 
-getPoster : Movie a -> String
-getPoster (Movie internals _) =
+
+--(\src -> Api.imageUrl ++ src)
+
+
+poster : Movie a -> String
+poster (Movie internals _) =
     let
-        poster =
+        moviePoster =
             mapSrc internals.posterPath
 
         backdrop =
@@ -329,7 +225,7 @@ getPoster (Movie internals _) =
         defaultImg =
             ""
     in
-    [ poster, backdrop, defaultImg ]
+    [ moviePoster, backdrop, defaultImg ]
         |> List.filter (\src -> src /= "")
         |> List.head
         |> Maybe.withDefault defaultImg

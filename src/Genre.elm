@@ -1,5 +1,6 @@
 module Genre exposing (Genre, GenresResults, fetch, viewList)
 
+import Api exposing (baseUrl)
 import Css exposing (..)
 import Html.Styled exposing (Html, div, text)
 import Html.Styled.Attributes exposing (css)
@@ -7,8 +8,8 @@ import Http
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline as DPipeline
 import RequestHelpers exposing (handleJsonResponse, queryParam)
+import Session exposing (Session)
 import Task exposing (Task)
-import Url exposing (baseUrl)
 
 
 
@@ -57,36 +58,20 @@ viewGenreChip genre =
 -- FETCH GENRES
 
 
-fetch : Maybe String -> Task Http.Error GenresResults
-fetch token =
+fetch : Session -> Task Http.Error GenresResults
+fetch session =
     let
-        isMissingToken =
-            token
-                |> Maybe.map (\t -> t == "")
-                |> Maybe.withDefault True
-
-        tokenQuery =
-            queryParam
-                { name = "api_key"
-                , value = Maybe.withDefault "" token
-                , isFirst = True
-                }
-
         url =
-            baseUrl ++ "genre/movie/list" ++ tokenQuery ++ "&language=en"
+            baseUrl ++ "genre/movie/list?language=en"
     in
-    if isMissingToken then
-        Task.fail <| Http.BadUrl "Missing API token"
-
-    else
-        Http.task
-            { method = "GET"
-            , headers = []
-            , url = url
-            , body = Http.emptyBody
-            , resolver = Http.stringResolver <| handleJsonResponse genresDecoder
-            , timeout = Nothing
-            }
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = Session.withToken session url
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver <| handleJsonResponse genresDecoder
+        , timeout = Nothing
+        }
 
 
 

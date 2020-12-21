@@ -1,6 +1,5 @@
-module MainDB exposing
-    ( Flags
-    , Model
+module Page.Home exposing
+    ( Model
     , Msg
     , init
     , subscriptions
@@ -8,107 +7,86 @@ module MainDB exposing
     , view
     )
 
+import Api exposing (baseUrl)
 import Css exposing (..)
 import Genre exposing (Genre, GenresResults)
-import Html.Styled exposing (Html, a, button, div, h1, header, img, input, p, span, text)
-import Html.Styled.Attributes exposing (class, css, href, src, value)
+import Html.Styled exposing (Html, button, div, h1, header, input, span, text)
+import Html.Styled.Attributes exposing (class, css, value)
 import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
 import Html.Styled.Keyed
 import Html.Styled.Lazy exposing (lazy, lazy5)
 import Http
-import Json.Decode
-import Movie exposing (PreviewMovie, PreviewMoviesResults)
+import Json.Decode as D exposing (Decoder, Value, succeed)
+import Json.Decode.Pipeline as DP
+import Movie exposing (PreviewMovie)
 import MovieId exposing (MovieId)
 import Ports exposing (onFavoriteMoviesChange, storeFavoriteMovies, storeQuery)
-import RequestHelpers
+import RequestHelpers exposing (handleJsonResponse)
 import SearchOptions exposing (updateOptions)
+import Session exposing (Session)
 import String
-import Tab exposing (..)
-import Task
+import Task exposing (Task)
 
 
 
 -- TYPES
 
 
-type alias Flags =
-    { query : Maybe String
-    , apiToken : Maybe String
-    , favoriteMovies : Maybe (List Int)
+type Tab
+    = Main
+    | Favorite
+    | Recommendations
+
+
+type alias MovieFeed =
+    { movies : List PreviewMovie
+    , page : Int
+    , totalPages : Int
+    , totalResults : Int
     }
-
-
-type alias Model =
-    { query : String
-    , results : PreviewMoviesResults
-    , favoriteMovies : List MovieId
-    , errorMessage : Maybe String
-    , apiToken : Maybe String
-    , searchOptions : SearchOptions.Options
-    , tab : Tab
-    , genres : GenresResults
-    }
-
-
-type Msg
-    = SetQuery String
-    | Search
-    | GotMovies (Result Http.Error PreviewMoviesResults)
-    | Options SearchOptions.Msg
-    | SetPage Int
-    | SetTab Tab
-    | GotGenres (Result Http.Error GenresResults)
-    | SetFavoriteMovie MovieId
-    | SetFavoriteMovies (List MovieId)
-    | RemoveFavoriteMovie MovieId
 
 
 
 -- MODEL
 
 
-initialModel : Model
-initialModel =
-    { query = ""
-    , results =
-        { movies = []
-        , page = 1
-        , totalResults = 0
-        , totalPages = 0
-        }
-    , favoriteMovies = []
-    , errorMessage = Nothing
-    , apiToken = Nothing
-    , searchOptions = SearchOptions.initialModel
-    , tab = Main
-    , genres = []
+type alias Model =
+    { session : Session
+    , feed : MovieFeed
+    , errorMessage : Maybe String
+    , searchOptions : SearchOptions.Options
+    , tab : Tab
+    , genres : GenresResults
     }
 
 
-init : Flags -> ( Model, Cmd Msg )
-init { query, apiToken, favoriteMovies } =
-    let
-        initialQuery =
-            Maybe.withDefault "" query
-    in
-    ( { initialModel
-        | query = initialQuery
-        , apiToken = apiToken
-        , favoriteMovies =
-            favoriteMovies
-                |> Maybe.map (List.map MovieId.fromInt)
-                |> Maybe.withDefault []
+initialFeed : MovieFeed
+initialFeed =
+    { movies = []
+    , page = 1
+    , totalResults = 0
+    , totalPages = 0
+    }
+
+
+initialTab : Tab
+initialTab =
+    Main
+
+
+init : Session -> ( Model, Cmd Msg )
+init session =
+    ( { session = session
+      , feed = initialFeed
+      , errorMessage = Nothing
+      , searchOptions = SearchOptions.initialModel
+      , tab = initialTab
+      , genres = []
       }
     , Cmd.batch
-        [ { tab = initialModel.tab
-          , token = apiToken
-          , query = initialQuery
-          , options = initialModel.searchOptions
-          , page = initialModel.results.page
-          }
-            |> Movie.fetch
-            |> Task.attempt GotMovies
-        , Task.attempt GotGenres <| Genre.fetch apiToken
+        [ fetchFeed session initialTab SearchOptions.initialModel initialFeed.page
+            |> Task.attempt GotFeed
+        , Task.attempt GotGenres <| Genre.fetch session
         ]
     )
 
@@ -117,23 +95,30 @@ init { query, apiToken, favoriteMovies } =
 -- UPDATE
 
 
+type Msg
+    = ChangedQuery String
+    | Search
+    | GotFeed (Result Http.Error MovieFeed)
+    | GotGenres (Result Http.Error GenresResults)
+    | Options SearchOptions.Msg
+    | ChangedPage Int
+    | ChangedTab Tab
+    | ChangedFavoriteMovie MovieId
+      -- | ChangedFavoriteMovies (List MovieId)
+    | RemovedFavoriteMovie MovieId
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Search ->
             ( { model | errorMessage = Nothing }
-            , { query = model.query
-              , token = model.apiToken
-              , options = model.searchOptions
-              , page = 1
-              , tab = model.tab
-              }
-                |> Movie.fetch
-                |> Task.attempt GotMovies
+            , fetchFeed model.session model.tab model.searchOptions 1
+                |> Task.attempt GotFeed
             )
 
-        SetQuery query ->
-            ( { model | query = query }, storeQuery query )
+        ChangedQuery query ->
+            ( model, storeQuery query )
 
         Options searchOptionsMsg ->
             let
@@ -142,14 +127,8 @@ update msg model =
 
                 cmd =
                     if shouldReload then
-                        { query = model.query
-                        , token = model.apiToken
-                        , options = searchOptions
-                        , page = 1
-                        , tab = model.tab
-                        }
-                            |> Movie.fetch
-                            |> Task.attempt GotMovies
+                        fetchFeed model.session model.tab searchOptions 1
+                            |> Task.attempt GotFeed
 
                     else
                         Cmd.none
@@ -158,27 +137,21 @@ update msg model =
             , cmd
             )
 
-        SetPage page ->
+        ChangedPage page ->
             ( model
-            , { query = model.query
-              , token = model.apiToken
-              , options = model.searchOptions
-              , page = page
-              , tab = model.tab
-              }
-                |> Movie.fetch
-                |> Task.attempt GotMovies
+            , fetchFeed model.session model.tab model.searchOptions page
+                |> Task.attempt GotFeed
             )
 
-        GotMovies previewMoviesResults ->
-            case previewMoviesResults of
+        GotFeed feedResults ->
+            case feedResults of
                 Err error ->
                     ( { model | errorMessage = Just <| RequestHelpers.toString error }, Cmd.none )
 
-                Ok results ->
-                    ( { model | results = results, errorMessage = Nothing }, Cmd.none )
+                Ok feed ->
+                    ( { model | feed = feed, errorMessage = Nothing }, Cmd.none )
 
-        SetTab tab ->
+        ChangedTab tab ->
             ( { model | tab = tab }, Cmd.none )
 
         GotGenres genresResults ->
@@ -189,20 +162,17 @@ update msg model =
                 Ok genres ->
                     ( { model | genres = genres, errorMessage = Nothing }, Cmd.none )
 
-        SetFavoriteMovie id ->
+        ChangedFavoriteMovie id ->
             let
                 favoriteMovies =
-                    id :: model.favoriteMovies
+                    id :: Session.favoriteMovies model.session
             in
             ( model, storeFavorite favoriteMovies )
 
-        SetFavoriteMovies ids ->
-            ( { model | favoriteMovies = ids }, Cmd.none )
-
-        RemoveFavoriteMovie id ->
+        RemovedFavoriteMovie id ->
             let
                 favoriteMovies =
-                    List.filter (\movieId -> movieId /= id) model.favoriteMovies
+                    List.filter (\movieId -> movieId /= id) (Session.favoriteMovies model.session)
             in
             ( model, storeFavorite favoriteMovies )
 
@@ -247,12 +217,15 @@ view model =
                 ]
                 [ text "Search for the movies accross different databases" ]
             ]
-        , input [ class "search-query", onInput SetQuery, value model.query, onEnter Search ] []
+        , input [ class "search-query", onInput ChangedQuery, value <| Session.query model.session, onEnter Search ] []
         , button [ class "search-button", onClick Search ] [ text "Search" ]
         , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
         , viewErrorMessage model.errorMessage
-        , Html.Styled.Keyed.node "div" [ class "results" ] (List.map (viewKeyedSearchResult model.genres model.favoriteMovies) model.results.movies)
-        , lazy viewPagination { page = model.results.page, total = model.results.totalPages }
+        , Html.Styled.Keyed.node
+            "div"
+            [ class "results" ]
+            (List.map (viewKeyedSearchResult model.genres (Session.favoriteMovies model.session)) model.feed.movies)
+        , lazy viewPagination { page = model.feed.page, total = model.feed.totalPages }
         ]
 
 
@@ -269,7 +242,7 @@ viewErrorMessage errorMessage =
 viewKeyedSearchResult : GenresResults -> List MovieId -> PreviewMovie -> ( String, Html Msg )
 viewKeyedSearchResult genres favoriteMovies movie =
     ( MovieId.toString <| Movie.id movie
-    , lazy5 Movie.view movie genres favoriteMovies SetFavoriteMovie RemoveFavoriteMovie
+    , lazy5 Movie.view movie genres favoriteMovies ChangedFavoriteMovie RemovedFavoriteMovie
     )
 
 
@@ -352,7 +325,7 @@ viewPaginationCell selectedPage page =
             , cursor pointer
             ]
                 ++ selectedStyle
-        , onClick <| SetPage page
+        , onClick <| ChangedPage page
         ]
         [ text <| String.fromInt page ]
 
@@ -368,7 +341,73 @@ viewPaginationSpace =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    onFavoriteMoviesChange (SetFavoriteMovies << List.map MovieId.fromInt)
+    Sub.none
+
+
+
+-- FETCH
+
+
+fetchFeed : Session -> Tab -> SearchOptions.Options -> Int -> Task Http.Error MovieFeed
+fetchFeed session tab options page =
+    let
+        regionQuery =
+            RequestHelpers.queryParam
+                { name = "region"
+                , value = Maybe.withDefault "" options.region
+                , isFirst = False
+                }
+
+        languageQuery =
+            RequestHelpers.queryParam
+                { name = "language"
+                , value = Maybe.withDefault "" options.language
+                , isFirst = False
+                }
+
+        pageQuery =
+            RequestHelpers.queryParam
+                { name = "page"
+                , value = String.fromInt page
+                , isFirst = False
+                }
+
+        url =
+            case tab of
+                Main ->
+                    baseUrl
+                        ++ "search/movie?"
+                        ++ regionQuery
+                        ++ languageQuery
+                        ++ pageQuery
+
+                Favorite ->
+                    ""
+
+                Recommendations ->
+                    ""
+    in
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = Session.withQuery session <| Session.withToken session url
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver <| handleJsonResponse <| feedDecoder
+        , timeout = Nothing
+        }
+
+
+
+-- SERIALIZATION
+
+
+feedDecoder : Decoder MovieFeed
+feedDecoder =
+    succeed MovieFeed
+        |> DP.required "results" (D.list Movie.previewDecoder)
+        |> DP.required "page" D.int
+        |> DP.required "total_pages" D.int
+        |> DP.required "total_results" D.int
 
 
 
@@ -380,12 +419,12 @@ onEnter msg =
     let
         isEnter code =
             if code == 13 then
-                Json.Decode.succeed msg
+                D.succeed msg
 
             else
-                Json.Decode.fail "not ENTER"
+                D.fail "not ENTER"
     in
-    on "keydown" (Json.Decode.andThen isEnter keyCode)
+    on "keydown" (D.andThen isEnter keyCode)
 
 
 

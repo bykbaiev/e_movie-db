@@ -1,4 +1,4 @@
-module Url exposing (baseUrl, imageUrl)
+module Api exposing (baseUrl, imageUrl)
 
 
 baseUrl : String
