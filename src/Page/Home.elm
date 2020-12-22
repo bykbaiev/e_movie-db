@@ -25,6 +25,7 @@ import RequestHelpers exposing (handleJsonResponse)
 import SearchOptions exposing (updateOptions)
 import Session exposing (Session)
 import String
+import StyledDocument exposing (StyledDocument)
 import Task exposing (Task)
 
 
@@ -186,47 +187,51 @@ storeFavorite ids =
 -- VIEW
 
 
-view : Model -> Html Msg
+view : Model -> StyledDocument Msg
 view model =
-    div
-        [ css
-            [ width (px 960)
-            , margin2 zero auto
-            , padding2 (px 32) zero
-            , fontFamilies [ "Helvetica", "Arial", "serif" ]
-            ]
-        ]
-        [ header
+    { title = "Home page - MovieDB"
+    , body =
+        [ div
             [ css
-                [ position relative
-                , padding2 (px 8) (px 16)
-                , backgroundColor (rgb 96 181 204)
-                , height (px 36)
+                [ width (px 960)
+                , margin2 zero auto
+                , padding2 (px 32) zero
+                , fontFamilies [ "Helvetica", "Arial", "serif" ]
                 ]
             ]
-            [ h1 [] [ text "MovieDB" ]
-            , span
+            [ header
                 [ css
-                    [ position absolute
-                    , top (px 16)
-                    , right (px 16)
-                    , fontStyle italic
-                    , fontSize (px 24)
-                    , backgroundColor (hex "#eee")
+                    [ position relative
+                    , padding2 (px 8) (px 16)
+                    , backgroundColor (rgb 96 181 204)
+                    , height (px 36)
                     ]
                 ]
-                [ text "Search for the movies accross different databases" ]
+                [ h1 [] [ text "MovieDB" ]
+                , span
+                    [ css
+                        [ position absolute
+                        , top (px 16)
+                        , right (px 16)
+                        , fontStyle italic
+                        , fontSize (px 24)
+                        , backgroundColor (hex "#eee")
+                        ]
+                    ]
+                    [ text "Search for the movies accross different databases" ]
+                ]
+            , input [ class "search-query", onInput ChangedQuery, value <| Session.query model.session, onEnter Search ] []
+            , button [ class "search-button", onClick Search ] [ text "Search" ]
+            , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
+            , viewErrorMessage model.errorMessage
+            , Html.Styled.Keyed.node
+                "div"
+                [ class "results" ]
+                (List.map (viewKeyedSearchResult model.genres (Session.favoriteMovies model.session)) model.feed.movies)
+            , lazy viewPagination { page = model.feed.page, total = model.feed.totalPages }
             ]
-        , input [ class "search-query", onInput ChangedQuery, value <| Session.query model.session, onEnter Search ] []
-        , button [ class "search-button", onClick Search ] [ text "Search" ]
-        , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
-        , viewErrorMessage model.errorMessage
-        , Html.Styled.Keyed.node
-            "div"
-            [ class "results" ]
-            (List.map (viewKeyedSearchResult model.genres (Session.favoriteMovies model.session)) model.feed.movies)
-        , lazy viewPagination { page = model.feed.page, total = model.feed.totalPages }
         ]
+    }
 
 
 viewErrorMessage : Maybe String -> Html Msg

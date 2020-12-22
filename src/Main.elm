@@ -1,13 +1,13 @@
 module Main exposing (main)
 
-import Browser exposing (Document)
+import Browser
 import Browser.Navigation as Nav
-import Html.Attributes exposing (title)
-import Html.Styled exposing (..)
-import Json.Decode as D exposing (Value)
+import Html.Styled as Html exposing (..)
+import Json.Decode exposing (Value)
 import Page.Home as Home
 import Route exposing (Route)
 import Session exposing (Session)
+import StyledDocument exposing (StyledDocument)
 import Url exposing (Url)
 
 
@@ -84,12 +84,17 @@ changeRouteTo maybeRoute model =
         Nothing ->
             ( NotFound session, Cmd.none )
 
+        Just Route.Root ->
+            Home.init session
+                |> updateModelWith Home GotHomeMsg
+
         Just _ ->
-            let
-                ( newModel, cmd ) =
-                    Home.init session
-            in
-            ( Home newModel, Cmd.map GotHomeMsg cmd )
+            ( NotFound session, Cmd.none )
+
+
+updateModelWith : (model -> Model) -> (msg -> Msg) -> ( model, Cmd msg ) -> ( Model, Cmd Msg )
+updateModelWith toModel toMsg ( model, msg ) =
+    ( toModel model, Cmd.map toMsg msg )
 
 
 getSession : Model -> Session
@@ -106,12 +111,21 @@ getSession model =
 -- VIEW
 
 
-view : Model -> { title : String, body : List (Html msg) }
+view : Model -> StyledDocument Msg
 view model =
-    { title = "Movie data base"
-    , body =
-        [ div [] [ text "New application?!" ] ]
-    }
+    case model of
+        Home home ->
+            let
+                { title, body } =
+                    Home.view home
+            in
+            { title = title, body = List.map (Html.map GotHomeMsg) body }
+
+        NotFound session ->
+            { title = "Movie data base"
+            , body =
+                [ div [] [ text "New application?!" ] ]
+            }
 
 
 
@@ -122,16 +136,9 @@ main : Program Value Model Msg
 main =
     Browser.application
         { init = init
-        , view = documentToUnstyled << view
+        , view = StyledDocument.toDocument << view
         , update = update
         , subscriptions = subscriptions
         , onUrlRequest = ClickedLink
         , onUrlChange = ChangedUrl
         }
-
-
-documentToUnstyled : { title : String, body : List (Html msg) } -> Document msg
-documentToUnstyled { title, body } =
-    { title = title
-    , body = List.map toUnstyled body
-    }
