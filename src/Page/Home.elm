@@ -21,6 +21,7 @@ import Json.Decode.Pipeline as DP
 import Movie exposing (PreviewMovie)
 import MovieId exposing (MovieId)
 import Ports exposing (onSessionChange, storeSession)
+import Regex exposing (Options)
 import RequestHelpers exposing (handleJsonResponse)
 import SearchOptions exposing (updateOptions)
 import Session exposing (Session, favoriteMovies)
@@ -355,39 +356,43 @@ subscriptions model =
 fetchFeed : Session -> Tab -> SearchOptions.Options -> Int -> Task Http.Error MovieFeed
 fetchFeed session tab options page =
     let
-        regionQuery =
-            RequestHelpers.queryParam
-                { name = "region"
-                , value = Maybe.withDefault "" options.region
-                , isFirst = False
-                }
+        queries =
+            List.filter
+                (\q ->
+                    case q of
+                        Just _ ->
+                            True
 
-        languageQuery =
-            RequestHelpers.queryParam
-                { name = "language"
-                , value = Maybe.withDefault "" options.language
-                , isFirst = False
-                }
+                        Nothing ->
+                            False
+                )
+                [ SearchOptions.regionQueryParam options
+                , SearchOptions.adultQueryParam options
+                , SearchOptions.languageQueryParam options
+                , Session.queryQueryParam session
+                , Session.tokenQueryParam session
+                , Just ("page=" ++ String.fromInt page)
+                ]
 
-        pageQuery =
-            RequestHelpers.queryParam
-                { name = "page"
-                , value = String.fromInt page
-                , isFirst = False
-                }
+        query =
+            queries
+                |> List.map (Maybe.withDefault "")
+                |> List.intersperse "&"
+                |> List.foldr (++) ""
+
+        mainUrl =
+            if Session.query session == "" then
+                "movie/top_rated?"
+
+            else
+                "search/movie?"
 
         url =
             case tab of
                 Main ->
                     baseUrl
-                        ++ "search/movie?"
-                        ++ regionQuery
-                        ++ languageQuery
-                        ++ pageQuery
-                        ++ "&"
-                        ++ Session.queryQueryParam session
-                        ++ "&"
-                        ++ Session.tokenQueryParam session
+                        ++ mainUrl
+                        ++ query
 
                 Favorite ->
                     ""

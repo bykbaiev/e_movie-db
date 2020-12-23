@@ -140,24 +140,14 @@ year (Session _ common _) =
 -- QUERY PARAMS
 
 
-tokenQueryParam : Session -> String
+tokenQueryParam : Session -> Maybe String
 tokenQueryParam (Session _ common _) =
-    case common.token of
-        Just tok ->
-            "api_key=" ++ tok
-
-        Nothing ->
-            ""
+    Maybe.map ((++) "api_key=") common.token
 
 
-queryQueryParam : Session -> String
+queryQueryParam : Session -> Maybe String
 queryQueryParam (Session _ _ internals) =
-    case internals.query of
-        Just q ->
-            "query=" ++ q
-
-        Nothing ->
-            ""
+    Maybe.map ((++) "query=") internals.query
 
 
 

@@ -62,7 +62,9 @@ fetch : Session -> Task Http.Error GenresResults
 fetch session =
     let
         url =
-            baseUrl ++ "genre/movie/list?language=en&" ++ Session.tokenQueryParam session
+            baseUrl
+                ++ "genre/movie/list?language=en&"
+                ++ Maybe.withDefault "" (Session.tokenQueryParam session)
     in
     Http.task
         { method = "GET"

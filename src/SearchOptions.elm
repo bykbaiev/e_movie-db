@@ -1,4 +1,13 @@
-module SearchOptions exposing (Msg, Options, initialModel, updateOptions, view)
+module SearchOptions exposing
+    ( Msg
+    , Options
+    , adultQueryParam
+    , initialModel
+    , languageQueryParam
+    , regionQueryParam
+    , updateOptions
+    , view
+    )
 
 import Css exposing (..)
 import Html.Attributes exposing (style)
@@ -12,14 +21,15 @@ import Json.Decode
 -- TYPES
 
 
-type alias Options =
-    { opened : Bool
-    , language : Maybe String
-    , includeAdult : Bool
-    , region : Maybe String
-    , year : Maybe Int
-    , primaryReleaseYear : Maybe Int
-    }
+type Options
+    = Options
+        { opened : Bool
+        , language : Maybe String
+        , includeAdult : Bool
+        , region : Maybe String
+        , year : Maybe Int
+        , primaryReleaseYear : Maybe Int
+        }
 
 
 type Msg
@@ -43,13 +53,14 @@ type alias SelectOption =
 
 initialModel : Options
 initialModel =
-    { opened = False
-    , language = Nothing
-    , includeAdult = False
-    , region = Nothing
-    , year = Nothing
-    , primaryReleaseYear = Nothing
-    }
+    Options
+        { opened = False
+        , language = Nothing
+        , includeAdult = False
+        , region = Nothing
+        , year = Nothing
+        , primaryReleaseYear = Nothing
+        }
 
 
 
@@ -66,25 +77,25 @@ initialModel =
 
 
 updateOptions : Msg -> Options -> ( Options, Bool )
-updateOptions msg options =
+updateOptions msg (Options options) =
     case msg of
         SetOpened opened ->
-            ( { options | opened = opened }, False )
+            ( Options { options | opened = opened }, False )
 
         SetLanguage language ->
-            ( { options | language = language }, True )
+            ( Options { options | language = language }, True )
 
         ToggleIncludeAdult ->
-            ( { options | includeAdult = not options.includeAdult }, True )
+            ( Options { options | includeAdult = not options.includeAdult }, True )
 
         SetRegion region ->
-            ( { options | region = region }, True )
+            ( Options { options | region = region }, True )
 
         SetYear year ->
-            ( { options | year = year }, True )
+            ( Options { options | year = year }, True )
 
         SetPrimaryReleaseYear primaryReleaseYear ->
-            ( { options | primaryReleaseYear = primaryReleaseYear }, True )
+            ( Options { options | primaryReleaseYear = primaryReleaseYear }, True )
 
 
 
@@ -92,11 +103,11 @@ updateOptions msg options =
 
 
 view : Options -> Html Msg
-view options =
+view (Options options) =
     let
         optionsContainer =
             if options.opened then
-                viewOptions options
+                viewOptions (Options options)
 
             else
                 text ""
@@ -135,7 +146,7 @@ viewSelect options { labelText, selectedValue } selectOpt =
 
 
 viewOptions : Options -> Html Msg
-viewOptions options =
+viewOptions (Options options) =
     div
         [ css
             [ displayFlex
@@ -273,3 +284,29 @@ stringToRegion region =
 
     else
         Nothing
+
+
+
+-- QUERY PARAMS
+
+
+languageQueryParam : Options -> Maybe String
+languageQueryParam (Options options) =
+    Maybe.map ((++) "language=") options.language
+
+
+regionQueryParam : Options -> Maybe String
+regionQueryParam (Options options) =
+    Maybe.map ((++) "region=") options.region
+
+
+adultQueryParam : Options -> Maybe String
+adultQueryParam (Options options) =
+    Just <|
+        "include_adult="
+            ++ (if options.includeAdult then
+                    "true"
+
+                else
+                    "false"
+               )
