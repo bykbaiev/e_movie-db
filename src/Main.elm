@@ -2,7 +2,9 @@ module Main exposing (main)
 
 import Browser
 import Browser.Navigation as Nav
+import Css exposing (..)
 import Html.Styled as Html exposing (..)
+import Html.Styled.Attributes exposing (css)
 import Json.Decode exposing (Value)
 import Page.Home as Home
 import Route exposing (Route)
@@ -44,7 +46,6 @@ subscriptions model =
 
 
 
--- Sub.map Home Home.subscriptions model
 -- UPDATE
 
 
@@ -118,19 +119,77 @@ getSession model =
 
 view : Model -> StyledDocument Msg
 view model =
-    case model of
-        Home home ->
-            let
-                { title, body } =
-                    Home.view home
-            in
-            { title = title, body = List.map (Html.map GotHomeMsg) body }
+    let
+        content =
+            case model of
+                Home home ->
+                    let
+                        { title, body } =
+                            Home.view home
+                    in
+                    { title = title, body = List.map (Html.map GotHomeMsg) body }
 
-        NotFound session ->
-            { title = "Movie data base"
-            , body =
-                [ div [] [ text "New application?!" ] ]
-            }
+                NotFound session ->
+                    { title = "Movie data base"
+                    , body =
+                        [ div [] [ text "New application?!" ] ]
+                    }
+    in
+    { title = content.title
+    , body =
+        [ div
+            [ css
+                [ displayFlex
+                , flexDirection column
+                , justifyContent spaceBetween
+                , height (vh 100)
+                ]
+            ]
+            [ viewHeader
+            , div
+                [ css
+                    [ flex (int 1)
+                    , padding (px 8)
+                    ]
+                ]
+                content.body
+            , viewFooter
+            ]
+        ]
+    }
+
+
+viewHeader : Html msg
+viewHeader =
+    header
+        [ css
+            [ padding (px 16)
+            , backgroundColor (rgb 96 181 204)
+            , textAlign center
+            , color (hex "#fff")
+            ]
+        ]
+        [ h1 [ css [ fontSize (px 36) ] ] [ text "Movies App" ]
+        , h2
+            [ css [ fontSize (px 24) ] ]
+            [ text "Keep all movies you link in one place" ]
+        ]
+
+
+viewFooter : Html msg
+viewFooter =
+    footer
+        [ css
+            [ padding (px 16)
+            , backgroundColor (rgb 96 181 204)
+            , textAlign center
+            , color (hex "#fff")
+            ]
+        ]
+        [ h2
+            [ css [ fontSize (px 24) ] ]
+            [ text "None rights reserved =)" ]
+        ]
 
 
 

@@ -216,32 +216,10 @@ view model =
             [ css
                 [ width (px 960)
                 , margin2 zero auto
-                , padding2 (px 32) zero
                 , fontFamilies [ "Helvetica", "Arial", "serif" ]
                 ]
             ]
-            [ header
-                [ css
-                    [ position relative
-                    , padding2 (px 8) (px 16)
-                    , backgroundColor (rgb 96 181 204)
-                    , height (px 36)
-                    ]
-                ]
-                [ h1 [] [ text "MovieDB" ]
-                , span
-                    [ css
-                        [ position absolute
-                        , top (px 16)
-                        , right (px 16)
-                        , fontStyle italic
-                        , fontSize (px 24)
-                        , backgroundColor (hex "#eee")
-                        ]
-                    ]
-                    [ text "Search for the movies accross different databases" ]
-                ]
-            , input [ class "search-query", onInput ChangedQuery, value <| Session.query model.session, onEnter Search ] []
+            [ input [ class "search-query", onInput ChangedQuery, value <| Session.query model.session, onEnter Search ] []
             , button [ class "search-button", onClick Search ] [ text "Search" ]
             , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
             , viewErrorMessage model.errorMessage
