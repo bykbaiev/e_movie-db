@@ -1,16 +1,19 @@
 module Session exposing
     ( Session
     , decode
+    , encode
     , favoriteMovies
     , navKey
     , query
-    , withQuery
-    , withToken
+    , queryQueryParam
+    , tokenQueryParam
+    , updateWithStoredItems
     )
 
 import Browser.Navigation as Nav
 import Json.Decode as D exposing (Decoder, Value)
 import Json.Decode.Pipeline as DP
+import Json.Encode as E
 import MovieId exposing (MovieId)
 
 
@@ -19,13 +22,23 @@ import MovieId exposing (MovieId)
 
 
 type Session
-    = Session Nav.Key Internals
+    = Session Nav.Key Token Internals
+
+
+type alias Token =
+    Maybe String
 
 
 type alias Internals =
     { query : Maybe String
-    , token : Maybe String
     , favoriteMovies : Maybe (List MovieId)
+    }
+
+
+emptyInternals : Internals
+emptyInternals =
+    { query = Nothing
+    , favoriteMovies = Nothing
     }
 
 
@@ -33,13 +46,23 @@ type alias Internals =
 -- SERIALIZATION
 
 
-decoder : Nav.Key -> Decoder Session
-decoder key =
+internalsDecoder : Decoder Internals
+internalsDecoder =
     D.succeed Internals
         |> DP.required "query" (D.nullable D.string)
-        |> DP.required "apiToken" (D.nullable D.string)
         |> DP.required "favoriteMovies" (D.nullable <| D.list MovieId.decoder)
-        |> D.map (Session key)
+
+
+decoder : Nav.Key -> Decoder Session
+decoder key =
+    internalsDecoder
+        |> D.andThen (addApiToken key)
+
+
+addApiToken : Nav.Key -> Internals -> Decoder Session
+addApiToken key internals =
+    D.field "apiToken" (D.nullable D.string)
+        |> D.map (\tok -> Session key tok internals)
 
 
 decode : Nav.Key -> Value -> Session
@@ -50,10 +73,22 @@ decode key value =
 
         Err _ ->
             Session key
-                { query = Nothing
-                , token = Nothing
-                , favoriteMovies = Nothing
-                }
+                Nothing
+                emptyInternals
+
+
+encode : Session -> Maybe String -> Maybe (List MovieId) -> E.Value
+encode session q fMovies =
+    let
+        (Session _ _ internals) =
+            session
+                |> withQuery q
+                |> withFavoriteMovies fMovies
+    in
+    E.object
+        [ ( "query", E.string <| Maybe.withDefault "" internals.query )
+        , ( "favoriteMovies", E.list MovieId.encode <| Maybe.withDefault [] internals.favoriteMovies )
+        ]
 
 
 
@@ -61,39 +96,67 @@ decode key value =
 
 
 navKey : Session -> Nav.Key
-navKey (Session key _) =
+navKey (Session key _ _) =
     key
 
 
 query : Session -> String
-query (Session _ internals) =
+query (Session _ _ internals) =
     Maybe.withDefault "" internals.query
 
 
 favoriteMovies : Session -> List MovieId
-favoriteMovies (Session _ internals) =
+favoriteMovies (Session _ _ internals) =
     Maybe.withDefault [] internals.favoriteMovies
 
 
 
--- TRANSFORM
+-- QUERY PARAMS
 
 
-withToken : Session -> String -> String
-withToken (Session _ internals) url =
-    case internals.token of
-        Just token ->
-            url ++ "&api_key=" ++ token
+tokenQueryParam : Session -> String
+tokenQueryParam (Session _ token _) =
+    case token of
+        Just tok ->
+            "api_key=" ++ tok
 
         Nothing ->
-            url
+            ""
 
 
-withQuery : Session -> String -> String
-withQuery (Session _ internals) url =
+queryQueryParam : Session -> String
+queryQueryParam (Session _ _ internals) =
     case internals.query of
         Just q ->
-            url ++ "&query=" ++ q
+            "query=" ++ q
 
         Nothing ->
-            url
+            ""
+
+
+
+-- TRANSFORMS
+
+
+withQuery : Maybe String -> Session -> Session
+withQuery q (Session key token internals) =
+    Session key token { internals | query = q }
+
+
+withFavoriteMovies : Maybe (List MovieId) -> Session -> Session
+withFavoriteMovies fMovies (Session key token internals) =
+    Session key token { internals | favoriteMovies = fMovies }
+
+
+updateWithStoredItems : Session -> D.Value -> Session
+updateWithStoredItems (Session key token _) stored =
+    let
+        internals =
+            case D.decodeValue internalsDecoder stored of
+                Ok inter ->
+                    inter
+
+                Err _ ->
+                    emptyInternals
+    in
+    Session key token internals

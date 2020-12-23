@@ -3,8 +3,7 @@ require('./index.html');
 const Elm = require('./Main.elm').Elm;
 
 const KEY = {
-    QUERY: 'query',
-    FAVORITE_MOVIES: 'favoriteMovies',
+    SESSION: 'session',
 };
 
 const getFromLocalStorage = (name, defaultValue) => {
@@ -21,30 +20,30 @@ const saveToLocalStorage = (name, value) => {
     }
 };
 
+const session = getFromLocalStorage(KEY.SESSION) || {};
+const query = session.query;
+const favoriteMovies = session.favoriteMovies;
+
 const app = Elm.Main.init({
     node: document.getElementById('main'),
     flags: {
-        query: getFromLocalStorage(KEY.QUERY),
+        query,
         apiToken: process.env.API_TOKEN,
-        favoriteMovies: getFromLocalStorage(KEY.FAVORITE_MOVIES, '[]')
+        favoriteMovies
     }
 });
 
-app.ports.storeQuery.subscribe((query) => {
-    saveToLocalStorage(KEY.QUERY, query);
-});
+app.ports.storeSession.subscribe(session => {
+    saveToLocalStorage(KEY.SESSION, session);
 
-app.ports.storeFavoriteMovies.subscribe((movies) => {
-    const movieList = [...getFromLocalStorage(KEY.FAVORITE_MOVIES, '[]'), ...movies];
-    saveToLocalStorage(KEY.FAVORITE_MOVIES, movieList);
 
-    app.ports.onFavoriteMoviesChange.send(movieList);
+    setTimeout(() => app.ports.onSessionChange.send(session), 0);
 });
 
 window.addEventListener('storage', (event) => {
     const { key, newValue } = event;
 
-    if (key === KEY.FAVORITE_MOVIES) {
-        app.ports.onFavoriteMoviesChange.send(JSON.parse(newValue));
+    if (key === KEY.SESSION) {
+        app.ports.onSessionChange.send(JSON.parse(newValue));
     }
 });

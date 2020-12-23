@@ -20,10 +20,10 @@ import Json.Decode as D exposing (Decoder, Value, succeed)
 import Json.Decode.Pipeline as DP
 import Movie exposing (PreviewMovie)
 import MovieId exposing (MovieId)
-import Ports exposing (onFavoriteMoviesChange, storeFavoriteMovies, storeQuery)
+import Ports exposing (onSessionChange, storeSession)
 import RequestHelpers exposing (handleJsonResponse)
 import SearchOptions exposing (updateOptions)
-import Session exposing (Session)
+import Session exposing (Session, favoriteMovies)
 import String
 import StyledDocument exposing (StyledDocument)
 import Task exposing (Task)
@@ -105,6 +105,7 @@ type Msg
     | ChangedPage Int
     | ChangedTab Tab
     | ChangedFavoriteMovie MovieId
+    | GotSession Session
       -- | ChangedFavoriteMovies (List MovieId)
     | RemovedFavoriteMovie MovieId
 
@@ -119,7 +120,14 @@ update msg model =
             )
 
         ChangedQuery query ->
-            ( model, storeQuery query )
+            let
+                fMovies =
+                    Just (Session.favoriteMovies model.session)
+
+                sessionValue =
+                    Session.encode model.session (Just query) fMovies
+            in
+            ( model, storeSession sessionValue )
 
         Options searchOptionsMsg ->
             let
@@ -168,19 +176,32 @@ update msg model =
                 favoriteMovies =
                     id :: Session.favoriteMovies model.session
             in
-            ( model, storeFavorite favoriteMovies )
+            ( model, storeFavorite model.session favoriteMovies )
 
         RemovedFavoriteMovie id ->
             let
                 favoriteMovies =
                     List.filter (\movieId -> movieId /= id) (Session.favoriteMovies model.session)
             in
-            ( model, storeFavorite favoriteMovies )
+            ( model, storeFavorite model.session favoriteMovies )
+
+        GotSession session ->
+            ( { model | session = session }, Cmd.none )
 
 
-storeFavorite : List MovieId -> Cmd Msg
-storeFavorite ids =
-    storeFavoriteMovies <| List.map MovieId.toInt ids
+storeFavorite : Session -> List MovieId -> Cmd Msg
+storeFavorite session ids =
+    let
+        fMovies =
+            Just ids
+
+        query =
+            Just (Session.query session)
+
+        sessionValue =
+            Session.encode session query fMovies
+    in
+    storeSession sessionValue
 
 
 
@@ -345,8 +366,8 @@ viewPaginationSpace =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.none
+subscriptions model =
+    onSessionChange (GotSession << Session.updateWithStoredItems model.session)
 
 
 
@@ -385,6 +406,10 @@ fetchFeed session tab options page =
                         ++ regionQuery
                         ++ languageQuery
                         ++ pageQuery
+                        ++ "&"
+                        ++ Session.queryQueryParam session
+                        ++ "&"
+                        ++ Session.tokenQueryParam session
 
                 Favorite ->
                     ""
@@ -395,7 +420,7 @@ fetchFeed session tab options page =
     Http.task
         { method = "GET"
         , headers = []
-        , url = Session.withQuery session <| Session.withToken session url
+        , url = url
         , body = Http.emptyBody
         , resolver = Http.stringResolver <| handleJsonResponse <| feedDecoder
         , timeout = Nothing

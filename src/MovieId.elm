@@ -1,6 +1,14 @@
-module MovieId exposing (MovieId, decoder, fromInt, toInt, toString)
+module MovieId exposing
+    ( MovieId
+    , decoder
+    , encode
+    , fromInt
+    , toInt
+    , toString
+    )
 
 import Json.Decode as D exposing (Decoder)
+import Json.Encode as E
 
 
 type MovieId
@@ -14,6 +22,11 @@ type MovieId
 decoder : Decoder MovieId
 decoder =
     D.map MovieId D.int
+
+
+encode : MovieId -> E.Value
+encode (MovieId id) =
+    E.int id
 
 
 

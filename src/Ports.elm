@@ -1,10 +1,10 @@
-port module Ports exposing (..)
+port module Ports exposing (onSessionChange, storeSession)
+
+import Json.Decode as D
+import Json.Encode as E
 
 
-port storeQuery : String -> Cmd msg
+port storeSession : E.Value -> Cmd msg
 
 
-port storeFavoriteMovies : List Int -> Cmd msg
-
-
-port onFavoriteMoviesChange : (List Int -> msg) -> Sub msg
+port onSessionChange : (D.Value -> msg) -> Sub msg

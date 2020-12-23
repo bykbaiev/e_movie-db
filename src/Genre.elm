@@ -62,12 +62,12 @@ fetch : Session -> Task Http.Error GenresResults
 fetch session =
     let
         url =
-            baseUrl ++ "genre/movie/list?language=en"
+            baseUrl ++ "genre/movie/list?language=en&" ++ Session.tokenQueryParam session
     in
     Http.task
         { method = "GET"
         , headers = []
-        , url = Session.withToken session url
+        , url = url
         , body = Http.emptyBody
         , resolver = Http.stringResolver <| handleJsonResponse genresDecoder
         , timeout = Nothing

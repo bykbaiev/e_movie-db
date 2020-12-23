@@ -33,9 +33,14 @@ init flags url navKey =
     changeRouteTo (Route.fromUrl url) (NotFound session)
 
 
-subscriptions : Model -> Sub msg
+subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.none
+    case model of
+        Home home ->
+            Sub.map GotHomeMsg (Home.subscriptions home)
+
+        NotFound _ ->
+            Sub.none
 
 
 
