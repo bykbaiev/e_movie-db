@@ -153,7 +153,7 @@ view model =
                     ]
                 ]
                 content.body
-            , viewFooter
+            , viewFooter <| getSession model
             ]
         ]
     }
@@ -176,8 +176,8 @@ viewHeader =
         ]
 
 
-viewFooter : Html msg
-viewFooter =
+viewFooter : Session -> Html msg
+viewFooter session =
     footer
         [ css
             [ padding (px 16)
@@ -188,7 +188,11 @@ viewFooter =
         ]
         [ h2
             [ css [ fontSize (px 24) ] ]
-            [ text "None rights reserved =)" ]
+            [ session
+                |> Session.year
+                |> (\y -> y ++ " None rights reserved =)")
+                |> text
+            ]
         ]
 
 

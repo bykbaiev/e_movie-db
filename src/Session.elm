@@ -8,6 +8,7 @@ module Session exposing
     , queryQueryParam
     , tokenQueryParam
     , updateWithStoredItems
+    , year
     )
 
 import Browser.Navigation as Nav
@@ -22,21 +23,30 @@ import MovieId exposing (MovieId)
 
 
 type Session
-    = Session Nav.Key Token Internals
+    = Session Nav.Key Common Stored
 
 
-type alias Token =
-    Maybe String
+type alias Common =
+    { token : Maybe String
+    , year : Maybe String
+    }
 
 
-type alias Internals =
+type alias Stored =
     { query : Maybe String
     , favoriteMovies : Maybe (List MovieId)
     }
 
 
-emptyInternals : Internals
-emptyInternals =
+emptyCommon : Common
+emptyCommon =
+    { token = Nothing
+    , year = Nothing
+    }
+
+
+emptyStored : Stored
+emptyStored =
     { query = Nothing
     , favoriteMovies = Nothing
     }
@@ -46,23 +56,24 @@ emptyInternals =
 -- SERIALIZATION
 
 
-internalsDecoder : Decoder Internals
-internalsDecoder =
-    D.succeed Internals
+storedDecoder : Decoder Stored
+storedDecoder =
+    D.succeed Stored
         |> DP.required "query" (D.nullable D.string)
         |> DP.required "favoriteMovies" (D.nullable <| D.list MovieId.decoder)
 
 
+commonDecoder : Decoder Common
+commonDecoder =
+    D.succeed Common
+        |> DP.required "apiToken" (D.nullable D.string)
+        |> DP.required "year" (D.nullable D.string)
+
+
 decoder : Nav.Key -> Decoder Session
 decoder key =
-    internalsDecoder
-        |> D.andThen (addApiToken key)
-
-
-addApiToken : Nav.Key -> Internals -> Decoder Session
-addApiToken key internals =
-    D.field "apiToken" (D.nullable D.string)
-        |> D.map (\tok -> Session key tok internals)
+    storedDecoder
+        |> D.map2 (Session key) commonDecoder
 
 
 decode : Nav.Key -> Value -> Session
@@ -73,8 +84,8 @@ decode key value =
 
         Err _ ->
             Session key
-                Nothing
-                emptyInternals
+                emptyCommon
+                emptyStored
 
 
 encode : Session -> Maybe String -> Maybe (List MovieId) -> E.Value
@@ -110,13 +121,18 @@ favoriteMovies (Session _ _ internals) =
     Maybe.withDefault [] internals.favoriteMovies
 
 
+year : Session -> String
+year (Session _ common _) =
+    Maybe.withDefault "" common.year
+
+
 
 -- QUERY PARAMS
 
 
 tokenQueryParam : Session -> String
-tokenQueryParam (Session _ token _) =
-    case token of
+tokenQueryParam (Session _ common _) =
+    case common.token of
         Just tok ->
             "api_key=" ++ tok
 
@@ -152,11 +168,11 @@ updateWithStoredItems : Session -> D.Value -> Session
 updateWithStoredItems (Session key token _) stored =
     let
         internals =
-            case D.decodeValue internalsDecoder stored of
+            case D.decodeValue storedDecoder stored of
                 Ok inter ->
                     inter
 
                 Err _ ->
-                    emptyInternals
+                    emptyStored
     in
     Session key token internals

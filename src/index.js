@@ -29,7 +29,8 @@ const app = Elm.Main.init({
     flags: {
         query,
         apiToken: process.env.API_TOKEN,
-        favoriteMovies
+        favoriteMovies,
+        year: (new Date()).getFullYear().toString()
     }
 });
 
