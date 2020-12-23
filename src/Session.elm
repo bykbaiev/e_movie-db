@@ -22,16 +22,26 @@ import MovieId exposing (MovieId)
 -- TYPES
 
 
+{-| Session is the data shared between pages. There are token for API,
+year (for footer) and data stored in local storage (search query and favorite movies)
+-}
 type Session
     = Session Nav.Key Common Stored
 
 
+{-| Common data is widely reused but doesn't need for
+updates (loaded only on application setup via flags).
+-}
 type alias Common =
     { token : Maybe String
     , year : Maybe String
     }
 
 
+{-| Stored data on the other hand needs updates.
+We store search query and favorite movies in local storage so
+JavaScript is the only source of truth for this data.
+-}
 type alias Stored =
     { query : Maybe String
     , favoriteMovies : Maybe (List MovieId)
