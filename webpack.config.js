@@ -4,6 +4,9 @@ const webpack = require('webpack');
 const dotenv = require('dotenv').config();
 
 module.exports = {
+    output: {
+        publicPath: '/',
+    },
     module: {
         rules: [
             {
@@ -46,6 +49,7 @@ module.exports = {
     devServer: {
         inline: true,
         hot: true,
-        stats: 'errors-only'
+        stats: 'errors-only',
+        historyApiFallback: true,
     }
 };
