@@ -54,6 +54,7 @@ type alias MovieFeed =
 
 type alias Model =
     { session : Session
+    , query : String
     , feed : MovieFeed
     , errorMessage : Maybe String
     , searchOptions : SearchOptions.Options
@@ -78,15 +79,20 @@ initialTab =
 
 init : Session -> ( Model, Cmd Msg )
 init session =
-    ( { session = session
-      , feed = initialFeed
-      , errorMessage = Nothing
-      , searchOptions = SearchOptions.initialModel
-      , tab = initialTab
-      , genres = []
-      }
+    let
+        model =
+            { session = session
+            , query = ""
+            , feed = initialFeed
+            , errorMessage = Nothing
+            , searchOptions = SearchOptions.initialModel
+            , tab = initialTab
+            , genres = []
+            }
+    in
+    ( model
     , Cmd.batch
-        [ fetchFeed session initialTab SearchOptions.initialModel initialFeed.page
+        [ fetchFeed model
             |> Task.attempt GotFeed
         , Task.attempt GotGenres <| Genre.fetch session
         ]
@@ -116,19 +122,14 @@ update msg model =
     case msg of
         Search ->
             ( { model | errorMessage = Nothing }
-            , fetchFeed model.session model.tab model.searchOptions 1
+            , model
+                |> withPage 1
+                |> fetchFeed
                 |> Task.attempt GotFeed
             )
 
         ChangedQuery query ->
-            let
-                fMovies =
-                    Just (Session.favoriteMovies model.session)
-
-                sessionValue =
-                    Session.encode model.session (Just query) fMovies
-            in
-            ( model, storeSession sessionValue )
+            ( { model | query = query }, Cmd.none )
 
         Options searchOptionsMsg ->
             let
@@ -137,7 +138,10 @@ update msg model =
 
                 cmd =
                     if shouldReload then
-                        fetchFeed model.session model.tab searchOptions 1
+                        model
+                            |> withSearchOptions searchOptions
+                            |> withPage 1
+                            |> fetchFeed
                             |> Task.attempt GotFeed
 
                     else
@@ -149,7 +153,9 @@ update msg model =
 
         ChangedPage page ->
             ( model
-            , fetchFeed model.session model.tab model.searchOptions page
+            , model
+                |> withPage page
+                |> fetchFeed
                 |> Task.attempt GotFeed
             )
 
@@ -191,16 +197,10 @@ update msg model =
 
 
 storeFavorite : Session -> List MovieId -> Cmd Msg
-storeFavorite session ids =
+storeFavorite session fMovies =
     let
-        fMovies =
-            Just ids
-
-        query =
-            Just (Session.query session)
-
         sessionValue =
-            Session.encode session query fMovies
+            Session.encode session fMovies
     in
     storeSession sessionValue
 
@@ -220,7 +220,7 @@ view model =
                 , fontFamilies [ "Helvetica", "Arial", "serif" ]
                 ]
             ]
-            [ input [ class "search-query", onInput ChangedQuery, value <| Session.query model.session, onEnter Search ] []
+            [ input [ class "search-query", onInput ChangedQuery, value <| model.query, onEnter Search ] []
             , button [ class "search-button", onClick Search ] [ text "Search" ]
             , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
             , viewErrorMessage model.errorMessage
@@ -353,9 +353,15 @@ subscriptions model =
 -- FETCH
 
 
-fetchFeed : Session -> Tab -> SearchOptions.Options -> Int -> Task Http.Error MovieFeed
-fetchFeed session tab options page =
+fetchFeed : Model -> Task Http.Error MovieFeed
+fetchFeed model =
     let
+        { session, tab, searchOptions, feed } =
+            model
+
+        { page } =
+            feed
+
         queries =
             List.filter
                 (\q ->
@@ -366,11 +372,11 @@ fetchFeed session tab options page =
                         Nothing ->
                             False
                 )
-                [ SearchOptions.regionQueryParam options
-                , SearchOptions.adultQueryParam options
-                , SearchOptions.languageQueryParam options
-                , Session.queryQueryParam session
+                [ SearchOptions.regionQueryParam searchOptions
+                , SearchOptions.adultQueryParam searchOptions
+                , SearchOptions.languageQueryParam searchOptions
                 , Session.tokenQueryParam session
+                , Just ("query=" ++ model.query)
                 , Just ("page=" ++ String.fromInt page)
                 ]
 
@@ -381,7 +387,7 @@ fetchFeed session tab options page =
                 |> List.foldr (++) ""
 
         mainUrl =
-            if Session.query session == "" then
+            if model.query == "" then
                 "movie/top_rated?"
 
             else
@@ -421,6 +427,27 @@ feedDecoder =
         |> DP.required "page" D.int
         |> DP.required "total_pages" D.int
         |> DP.required "total_results" D.int
+
+
+
+-- TRANSFORMATION
+
+
+withPage : Int -> Model -> Model
+withPage page model =
+    let
+        { feed } =
+            model
+
+        updatedFeed =
+            { feed | page = page }
+    in
+    { model | feed = updatedFeed }
+
+
+withSearchOptions : SearchOptions.Options -> Model -> Model
+withSearchOptions searchOptions model =
+    { model | searchOptions = searchOptions }
 
 
 

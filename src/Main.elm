@@ -29,6 +29,9 @@ type Model
 init : Value -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url navKey =
     let
+        _ =
+            Debug.log "flags" flags
+
         session =
             Session.decode navKey flags
     in

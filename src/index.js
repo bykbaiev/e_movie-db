@@ -21,14 +21,14 @@ const saveToLocalStorage = (name, value) => {
 };
 
 const session = getFromLocalStorage(KEY.SESSION) || {};
-const query = session.query;
-const favoriteMovies = session.favoriteMovies;
+const favoriteMovies = session.favoriteMovies || null;
+
+console.log({ apiToken: process.env.API_TOKEN, favoriteMovies, year: (new Date()).getFullYear().toString() });
 
 const app = Elm.Main.init({
     node: document.getElementById('main'),
     flags: {
-        query,
-        apiToken: process.env.API_TOKEN,
+        apiToken: process.env.API_TOKEN || null,
         favoriteMovies,
         year: (new Date()).getFullYear().toString()
     }

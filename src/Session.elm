@@ -4,8 +4,6 @@ module Session exposing
     , encode
     , favoriteMovies
     , navKey
-    , query
-    , queryQueryParam
     , tokenQueryParam
     , updateWithStoredItems
     , year
@@ -23,10 +21,10 @@ import MovieId exposing (MovieId)
 
 
 {-| Session is the data shared between pages. There are token for API,
-year (for footer) and data stored in local storage (search query and favorite movies)
+year (for footer) and data stored in local storage (favorite movies)
 -}
 type Session
-    = Session Nav.Key Common Stored
+    = Session Nav.Key Common (List MovieId)
 
 
 {-| Common data is widely reused but doesn't need for
@@ -38,16 +36,6 @@ type alias Common =
     }
 
 
-{-| Stored data on the other hand needs updates.
-We store search query and favorite movies in local storage so
-JavaScript is the only source of truth for this data.
--}
-type alias Stored =
-    { query : Maybe String
-    , favoriteMovies : Maybe (List MovieId)
-    }
-
-
 emptyCommon : Common
 emptyCommon =
     { token = Nothing
@@ -55,22 +43,14 @@ emptyCommon =
     }
 
 
-emptyStored : Stored
-emptyStored =
-    { query = Nothing
-    , favoriteMovies = Nothing
-    }
-
-
 
 -- SERIALIZATION
 
 
-storedDecoder : Decoder Stored
-storedDecoder =
-    D.succeed Stored
-        |> DP.required "query" (D.nullable D.string)
-        |> DP.required "favoriteMovies" (D.nullable <| D.list MovieId.decoder)
+favoriteMoviesDecoder : Decoder (List MovieId)
+favoriteMoviesDecoder =
+    D.succeed (Maybe.withDefault [])
+        |> DP.optional "favoriteMovies" (D.nullable <| D.list MovieId.decoder) Nothing
 
 
 commonDecoder : Decoder Common
@@ -82,7 +62,7 @@ commonDecoder =
 
 decoder : Nav.Key -> Decoder Session
 decoder key =
-    storedDecoder
+    favoriteMoviesDecoder
         |> D.map2 (Session key) commonDecoder
 
 
@@ -90,26 +70,30 @@ decode : Nav.Key -> Value -> Session
 decode key value =
     case D.decodeValue (decoder key) value of
         Ok session ->
+            let
+                _ =
+                    Debug.log "Successful decoding" session
+            in
             session
 
-        Err _ ->
+        Err e ->
+            let
+                _ =
+                    Debug.log "decoding error" e
+            in
             Session key
                 emptyCommon
-                emptyStored
+                []
 
 
-encode : Session -> Maybe String -> Maybe (List MovieId) -> E.Value
-encode session q fMovies =
+encode : Session -> List MovieId -> E.Value
+encode session fMovies =
     let
-        (Session _ _ internals) =
-            session
-                |> withQuery q
-                |> withFavoriteMovies fMovies
+        (Session _ _ ids) =
+            withFavoriteMovies fMovies session
     in
     E.object
-        [ ( "query", E.string <| Maybe.withDefault "" internals.query )
-        , ( "favoriteMovies", E.list MovieId.encode <| Maybe.withDefault [] internals.favoriteMovies )
-        ]
+        [ ( "favoriteMovies", E.list MovieId.encode <| ids ) ]
 
 
 
@@ -121,14 +105,9 @@ navKey (Session key _ _) =
     key
 
 
-query : Session -> String
-query (Session _ _ internals) =
-    Maybe.withDefault "" internals.query
-
-
 favoriteMovies : Session -> List MovieId
-favoriteMovies (Session _ _ internals) =
-    Maybe.withDefault [] internals.favoriteMovies
+favoriteMovies (Session _ _ fMovies) =
+    fMovies
 
 
 year : Session -> String
@@ -145,34 +124,24 @@ tokenQueryParam (Session _ common _) =
     Maybe.map ((++) "api_key=") common.token
 
 
-queryQueryParam : Session -> Maybe String
-queryQueryParam (Session _ _ internals) =
-    Maybe.map ((++) "query=") internals.query
-
-
 
 -- TRANSFORMS
 
 
-withQuery : Maybe String -> Session -> Session
-withQuery q (Session key token internals) =
-    Session key token { internals | query = q }
-
-
-withFavoriteMovies : Maybe (List MovieId) -> Session -> Session
-withFavoriteMovies fMovies (Session key token internals) =
-    Session key token { internals | favoriteMovies = fMovies }
+withFavoriteMovies : List MovieId -> Session -> Session
+withFavoriteMovies fMovies (Session key token _) =
+    Session key token fMovies
 
 
 updateWithStoredItems : Session -> D.Value -> Session
-updateWithStoredItems (Session key token _) stored =
+updateWithStoredItems (Session key token _) storedFMovies =
     let
-        internals =
-            case D.decodeValue storedDecoder stored of
-                Ok inter ->
-                    inter
+        fMovies =
+            case D.decodeValue favoriteMoviesDecoder storedFMovies of
+                Ok ids ->
+                    ids
 
                 Err _ ->
-                    emptyStored
+                    []
     in
-    Session key token internals
+    Session key token fMovies
