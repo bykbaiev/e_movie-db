@@ -103,6 +103,7 @@ type Msg
     | SelectedFavoriteMovie MovieId
     | GotSession Session
     | RemovedFavoriteMovie MovieId
+    | NoMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -183,6 +184,9 @@ update msg model =
 
         GotSession session ->
             ( { model | session = session }, Cmd.none )
+
+        NoMsg ->
+            ( model, Cmd.none )
 
 
 storeFavorite : Session -> List MovieId -> Cmd Msg
@@ -337,7 +341,7 @@ viewPagination { page, total } =
         rangeContainer =
             div [ css paginationContainerStyle ] <| List.map (viewPaginationCell page) range
     in
-    if total == 0 then
+    if total < 2 then
         div [] []
 
     else
@@ -377,7 +381,12 @@ viewPaginationCell selectedPage page =
             , cursor pointer
             ]
                 ++ selectedStyle
-        , onClick <| ChangedPage page
+        , onClick <|
+            if selected then
+                NoMsg
+
+            else
+                ChangedPage page
         ]
         [ text <| String.fromInt page ]
 
@@ -402,20 +411,26 @@ subscriptions model =
 
 fetchFeed : Model -> Int -> Task Http.Error Feed
 fetchFeed model page =
+    case model.tab of
+        Main ->
+            fetchMainFeed model page
+
+        Favorite ->
+            fetchFavoriteMovies model
+
+        Recommendations ->
+            Task.fail Http.NetworkError
+
+
+fetchMainFeed : Model -> Int -> Task Http.Error Feed
+fetchMainFeed model page =
     let
-        { session, tab, searchOptions } =
+        { session, searchOptions } =
             model
 
         queries =
             List.filter
-                (\q ->
-                    case q of
-                        Just _ ->
-                            True
-
-                        Nothing ->
-                            False
-                )
+                ((/=) Nothing)
                 [ SearchOptions.regionQueryParam searchOptions
                 , SearchOptions.adultQueryParam searchOptions
                 , SearchOptions.languageQueryParam searchOptions
@@ -438,24 +453,31 @@ fetchFeed model page =
                 "search/movie?"
 
         url =
-            case tab of
-                Main ->
-                    baseUrl
-                        ++ mainUrl
-                        ++ query
-
-                Favorite ->
-                    ""
-
-                Recommendations ->
-                    ""
+            baseUrl ++ mainUrl ++ query
     in
+    fetch url feedDecoder
+
+
+fetchFavoriteMovies : Model -> Task Http.Error Feed
+fetchFavoriteMovies model =
+    let
+        ids =
+            Session.favoriteMovies model.session
+
+        _ =
+            Debug.log "favorite" ids
+    in
+    Task.fail Http.NetworkError
+
+
+fetch : String -> Decoder a -> Task Http.Error a
+fetch url decoder =
     Http.task
         { method = "GET"
         , headers = []
         , url = url
         , body = Http.emptyBody
-        , resolver = Http.stringResolver <| handleJsonResponse <| feedDecoder
+        , resolver = Http.stringResolver <| handleJsonResponse <| decoder
         , timeout = Nothing
         }
 
