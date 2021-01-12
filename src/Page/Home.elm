@@ -209,29 +209,71 @@ view model =
                 , fontFamilies [ "Helvetica", "Arial", "serif" ]
                 ]
             ]
-            ([ input [ class "search-query", onInput ChangedQuery, value <| model.query, onEnter Search ] []
-             , button [ class "search-button", onClick Search ] [ text "Search" ]
-             , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
-             , viewErrorMessage model.feed
-             , viewErrorMessage model.genres
-             ]
-                ++ viewFeed model
-            )
+            [ input [ class "search-query", onInput ChangedQuery, value <| model.query, onEnter Search ] []
+            , button [ class "search-button", onClick Search ] [ text "Search" ]
+            , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
+            , viewTab model
+            ]
         ]
     }
 
 
-viewErrorMessage : Status a -> Html Msg
-viewErrorMessage status =
-    case status of
-        Failure msg ->
-            div [ class "error" ] [ text msg ]
+viewTab : Model -> Html Msg
+viewTab model =
+    div []
+        [ div [ css [ displayFlex ] ]
+            [ viewTabButton model.tab Main "Top rated"
+            , viewTabButton model.tab Favorite "Favorite"
+            , viewTabButton model.tab Recommendations "Recommendations"
+            ]
+        , viewTabData model
+        ]
 
-        Success _ ->
-            text ""
 
-        Loading ->
-            text ""
+viewTabData : Model -> Html Msg
+viewTabData model =
+    case ( model.feed, model.genres ) of
+        ( Loading, _ ) ->
+            text "Loading..."
+
+        ( _, Loading ) ->
+            text "Loading..."
+
+        ( Failure feedMsg, _ ) ->
+            viewErrorMessage feedMsg
+
+        ( _, Failure genresMsg ) ->
+            viewErrorMessage genresMsg
+
+        ( Success _, Success _ ) ->
+            div [] <| viewFeed model
+
+
+viewTabButton : Tab -> Tab -> String -> Html Msg
+viewTabButton currentTab tab name =
+    let
+        active =
+            currentTab == tab
+    in
+    div
+        [ css
+            [ padding2 (px 8) (px 24)
+            , margin (px 8)
+            , if active then
+                borderBottom3 (px 2) solid (hex "000000")
+
+              else
+                border zero
+            , cursor pointer
+            ]
+        , onClick (ChangedTab tab)
+        ]
+        [ text name ]
+
+
+viewErrorMessage : String -> Html Msg
+viewErrorMessage msg =
+    div [ class "error" ] [ text msg ]
 
 
 viewFeed : Model -> List (Html Msg)
