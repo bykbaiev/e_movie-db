@@ -153,7 +153,7 @@ update msg model =
         ChangedTab tab ->
             let
                 updatedModel =
-                    { model | tab = tab }
+                    { model | tab = tab, feed = Loading }
             in
             ( updatedModel
             , Task.attempt GotFeed <| fetchFeed updatedModel 1
