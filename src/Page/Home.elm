@@ -9,7 +9,7 @@ module Page.Home exposing
 
 import Api exposing (baseUrl)
 import Css exposing (..)
-import Genre exposing (Genre, GenresResults)
+import Genre exposing (Genre)
 import Html.Styled exposing (Html, button, div, h1, header, input, span, text)
 import Html.Styled.Attributes exposing (class, css, value)
 import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
@@ -40,12 +40,18 @@ type Tab
     | Recommendations
 
 
-type alias MovieFeed =
+type alias Feed =
     { movies : List PreviewMovie
     , page : Int
     , totalPages : Int
     , totalResults : Int
     }
+
+
+type Status a
+    = Loading
+    | Success a
+    | Failure String
 
 
 
@@ -55,26 +61,11 @@ type alias MovieFeed =
 type alias Model =
     { session : Session
     , query : String
-    , feed : MovieFeed
-    , errorMessage : Maybe String
-    , searchOptions : SearchOptions.Options
+    , searchOptions : SearchOptions.Options -- TODO move logic here, make SearchOptions simple module without TEA
     , tab : Tab
-    , genres : GenresResults
+    , feed : Status Feed
+    , genres : Status (List Genre)
     }
-
-
-initialFeed : MovieFeed
-initialFeed =
-    { movies = []
-    , page = 1
-    , totalResults = 0
-    , totalPages = 0
-    }
-
-
-initialTab : Tab
-initialTab =
-    Main
 
 
 init : Session -> ( Model, Cmd Msg )
@@ -83,17 +74,15 @@ init session =
         model =
             { session = session
             , query = ""
-            , feed = initialFeed
-            , errorMessage = Nothing
             , searchOptions = SearchOptions.initialModel
-            , tab = initialTab
-            , genres = []
+            , tab = Main
+            , feed = Loading
+            , genres = Loading
             }
     in
     ( model
     , Cmd.batch
-        [ fetchFeed model
-            |> Task.attempt GotFeed
+        [ Task.attempt GotFeed <| fetchFeed model 1
         , Task.attempt GotGenres <| Genre.fetch session
         ]
     )
@@ -106,14 +95,13 @@ init session =
 type Msg
     = ChangedQuery String
     | Search
-    | GotFeed (Result Http.Error MovieFeed)
-    | GotGenres (Result Http.Error GenresResults)
+    | GotFeed (Result Http.Error Feed)
+    | GotGenres (Result Http.Error (List Genre))
     | Options SearchOptions.Msg
     | ChangedPage Int
     | ChangedTab Tab
-    | ChangedFavoriteMovie MovieId
+    | SelectedFavoriteMovie MovieId
     | GotSession Session
-      -- | ChangedFavoriteMovies (List MovieId)
     | RemovedFavoriteMovie MovieId
 
 
@@ -121,11 +109,8 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Search ->
-            ( { model | errorMessage = Nothing }
-            , model
-                |> withPage 1
-                |> fetchFeed
-                |> Task.attempt GotFeed
+            ( { model | feed = Loading }
+            , Task.attempt GotFeed <| fetchFeed model 1
             )
 
         ChangedQuery query ->
@@ -136,49 +121,53 @@ update msg model =
                 ( searchOptions, shouldReload ) =
                     updateOptions searchOptionsMsg model.searchOptions
 
+                updatedModel =
+                    if shouldReload then
+                        { model | searchOptions = searchOptions, feed = Loading }
+
+                    else
+                        { model | searchOptions = searchOptions }
+
                 cmd =
                     if shouldReload then
-                        model
-                            |> withSearchOptions searchOptions
-                            |> withPage 1
-                            |> fetchFeed
-                            |> Task.attempt GotFeed
+                        Task.attempt GotFeed <| fetchFeed updatedModel 1
 
                     else
                         Cmd.none
             in
-            ( { model | searchOptions = searchOptions }
-            , cmd
-            )
+            ( updatedModel, cmd )
 
         ChangedPage page ->
-            ( model
-            , model
-                |> withPage page
-                |> fetchFeed
-                |> Task.attempt GotFeed
+            ( { model | feed = Loading }
+            , Task.attempt GotFeed <| fetchFeed model page
             )
 
         GotFeed feedResults ->
             case feedResults of
                 Err error ->
-                    ( { model | errorMessage = Just <| RequestHelpers.toString error }, Cmd.none )
+                    ( { model | feed = Failure <| RequestHelpers.toString error }, Cmd.none )
 
                 Ok feed ->
-                    ( { model | feed = feed, errorMessage = Nothing }, Cmd.none )
+                    ( { model | feed = Success feed }, Cmd.none )
 
         ChangedTab tab ->
-            ( { model | tab = tab }, Cmd.none )
+            let
+                updatedModel =
+                    { model | tab = tab }
+            in
+            ( updatedModel
+            , Task.attempt GotFeed <| fetchFeed updatedModel 1
+            )
 
         GotGenres genresResults ->
             case genresResults of
                 Err error ->
-                    ( { model | errorMessage = Just <| RequestHelpers.toString error }, Cmd.none )
+                    ( { model | genres = Failure <| RequestHelpers.toString error }, Cmd.none )
 
                 Ok genres ->
-                    ( { model | genres = genres, errorMessage = Nothing }, Cmd.none )
+                    ( { model | genres = Success genres }, Cmd.none )
 
-        ChangedFavoriteMovie id ->
+        SelectedFavoriteMovie id ->
             let
                 favoriteMovies =
                     id :: Session.favoriteMovies model.session
@@ -220,34 +209,50 @@ view model =
                 , fontFamilies [ "Helvetica", "Arial", "serif" ]
                 ]
             ]
-            [ input [ class "search-query", onInput ChangedQuery, value <| model.query, onEnter Search ] []
-            , button [ class "search-button", onClick Search ] [ text "Search" ]
-            , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
-            , viewErrorMessage model.errorMessage
-            , Html.Styled.Keyed.node
-                "div"
-                [ class "results" ]
-                (List.map (viewKeyedSearchResult model.genres (Session.favoriteMovies model.session)) model.feed.movies)
-            , lazy viewPagination { page = model.feed.page, total = model.feed.totalPages }
-            ]
+            ([ input [ class "search-query", onInput ChangedQuery, value <| model.query, onEnter Search ] []
+             , button [ class "search-button", onClick Search ] [ text "Search" ]
+             , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
+             , viewErrorMessage model.feed
+             , viewErrorMessage model.genres
+             ]
+                ++ viewFeed model
+            )
         ]
     }
 
 
-viewErrorMessage : Maybe String -> Html Msg
-viewErrorMessage errorMessage =
-    case errorMessage of
-        Just message ->
-            div [ class "error" ] [ text message ]
+viewErrorMessage : Status a -> Html Msg
+viewErrorMessage status =
+    case status of
+        Failure msg ->
+            div [ class "error" ] [ text msg ]
 
-        Nothing ->
+        Success _ ->
+            text ""
+
+        Loading ->
             text ""
 
 
-viewKeyedSearchResult : GenresResults -> List MovieId -> PreviewMovie -> ( String, Html Msg )
+viewFeed : Model -> List (Html Msg)
+viewFeed model =
+    case ( model.feed, model.genres ) of
+        ( Success feedData, Success genresData ) ->
+            [ Html.Styled.Keyed.node
+                "div"
+                [ class "results" ]
+                (List.map (viewKeyedSearchResult genresData (Session.favoriteMovies model.session)) feedData.movies)
+            , lazy viewPagination { page = feedData.page, total = feedData.totalPages }
+            ]
+
+        ( _, _ ) ->
+            []
+
+
+viewKeyedSearchResult : List Genre -> List MovieId -> PreviewMovie -> ( String, Html Msg )
 viewKeyedSearchResult genres favoriteMovies movie =
     ( MovieId.toString <| Movie.id movie
-    , lazy5 Movie.view movie genres favoriteMovies ChangedFavoriteMovie RemovedFavoriteMovie
+    , lazy5 Movie.view movie genres favoriteMovies SelectedFavoriteMovie RemovedFavoriteMovie
     )
 
 
@@ -353,14 +358,11 @@ subscriptions model =
 -- FETCH
 
 
-fetchFeed : Model -> Task Http.Error MovieFeed
-fetchFeed model =
+fetchFeed : Model -> Int -> Task Http.Error Feed
+fetchFeed model page =
     let
-        { session, tab, searchOptions, feed } =
+        { session, tab, searchOptions } =
             model
-
-        { page } =
-            feed
 
         queries =
             List.filter
@@ -420,9 +422,9 @@ fetchFeed model =
 -- SERIALIZATION
 
 
-feedDecoder : Decoder MovieFeed
+feedDecoder : Decoder Feed
 feedDecoder =
-    succeed MovieFeed
+    succeed Feed
         |> DP.required "results" (D.list Movie.previewDecoder)
         |> DP.required "page" D.int
         |> DP.required "total_pages" D.int
@@ -433,20 +435,8 @@ feedDecoder =
 -- TRANSFORMATION
 
 
-withPage : Int -> Model -> Model
-withPage page model =
-    let
-        { feed } =
-            model
-
-        updatedFeed =
-            { feed | page = page }
-    in
-    { model | feed = updatedFeed }
-
-
-withSearchOptions : SearchOptions.Options -> Model -> Model
-withSearchOptions searchOptions model =
+mapSearchOptions : SearchOptions.Options -> Model -> Model
+mapSearchOptions searchOptions model =
     { model | searchOptions = searchOptions }
 
 
