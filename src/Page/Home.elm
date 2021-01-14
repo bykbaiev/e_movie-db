@@ -54,10 +54,6 @@ type Status a
     | Failure String
 
 
-type alias RequestTracker =
-    String
-
-
 
 -- MODEL
 
@@ -69,7 +65,6 @@ type alias Model =
     , tab : Tab
     , feed : Status Feed
     , genres : Status (List Genre)
-    , trackers : List RequestTracker
     }
 
 
@@ -83,7 +78,6 @@ init session =
             , tab = Main
             , feed = Loading Nothing
             , genres = Loading Nothing
-            , trackers = []
             }
     in
     ( model
@@ -110,7 +104,6 @@ type Msg
     | SelectedFavoriteMovie MovieId
     | GotSession Session
     | RemovedFavoriteMovie MovieId
-    | SetTrackers (List RequestTracker)
     | NoMsg
 
 
@@ -168,9 +161,6 @@ update msg model =
 
             else
                 ( model, Cmd.none )
-
-        SetTrackers trackers ->
-            ( { model | trackers = trackers }, Cmd.none )
 
         ChangedTab tab ->
             let
@@ -503,12 +493,7 @@ fetchFavoriteMovies model =
         _ =
             Debug.log "number" requestsNumber
     in
-    case requests of
-        [] ->
-            Task.attempt GotFeed <| Task.fail (Http.BadUrl "There are no any movies")
-
-        request :: _ ->
-            Task.attempt (GotInBetweenFeedMovie model.tab) request
+    Cmd.batch (List.map (Task.attempt (GotInBetweenFeedMovie model.tab)) requests)
 
 
 
@@ -559,6 +544,10 @@ feedDecoder =
 
 withInBetweenFeedMovie : Result Http.Error PreviewMovie -> Model -> Model
 withInBetweenFeedMovie movieResults model =
+    let
+        count =
+            List.length <| Session.favoriteMovies model.session
+    in
     case model.feed of
         Loading maybeMovies ->
             case movieResults of
@@ -566,7 +555,18 @@ withInBetweenFeedMovie movieResults model =
                     { model | feed = Failure <| RequestHelpers.toString error }
 
                 Ok movie ->
-                    { model | feed = Loading (Just <| movie :: Maybe.withDefault [] maybeMovies) }
+                    let
+                        movies =
+                            movie :: Maybe.withDefault [] maybeMovies
+
+                        enough =
+                            List.length movies == count
+                    in
+                    if enough then
+                        { model | feed = Success { movies = movies, page = 1, totalPages = 1, totalResults = count } }
+
+                    else
+                        { model | feed = Loading (Just movies) }
 
         Success _ ->
             model
