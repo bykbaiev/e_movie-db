@@ -194,7 +194,17 @@ viewHeader =
             , color (hex "#fff")
             ]
         ]
-        [ h1 [ css [ fontSize (px 36) ] ] [ text "Movies App" ]
+        [ h1
+            [ css [ fontSize (px 36) ] ]
+            [ a
+                [ Route.href <| Route.Root
+                , css
+                    [ color <| hex "fff"
+                    , hover [ textDecoration none ]
+                    ]
+                ]
+                [ text "Movies App" ]
+            ]
         , h2
             [ css [ fontSize (px 24) ] ]
             [ text "Keep all movies you link in one place" ]

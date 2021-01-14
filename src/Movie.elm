@@ -13,7 +13,7 @@ import Api exposing (baseUrl)
 import Css exposing (..)
 import DateFormat
 import Genre exposing (Genre)
-import Html.Styled exposing (Html, a, button, div, img, p, text)
+import Html.Styled exposing (Html, a, button, div, h2, img, p, text)
 import Html.Styled.Attributes exposing (css, href, src)
 import Html.Styled.Events exposing (onClick)
 import Http
@@ -41,7 +41,6 @@ type alias Internals =
     { id : MovieId
     , title : String
     , rate : Float
-    , genreIds : List Int
     , originalLanguage : String
     , originalTitle : String
     , overview : String
@@ -53,11 +52,11 @@ type alias Internals =
 
 
 type Preview
-    = Preview
+    = Preview (List Int)
 
 
 type Full
-    = Full
+    = Full (List Genre)
 
 
 type alias PreviewMovie =
@@ -72,19 +71,38 @@ type alias FullMovie =
 -- VIEW
 
 
-view : FullMovie -> List Genre -> List MovieId -> (MovieId -> msg) -> (MovieId -> msg) -> Html msg
-view movie genres favoriteMovies addToFavorites removeFromFavorites =
-    div [] []
+view : FullMovie -> List MovieId -> (MovieId -> msg) -> (MovieId -> msg) -> Html msg
+view movie favoriteMovies addToFavorites removeFromFavorites =
+    let
+        (Movie internals (Full genres)) =
+            movie
+
+        _ =
+            Debug.log "movie view" movie
+
+        _ =
+            Debug.log "title" internals.title
+    in
+    div
+        []
+        [ h2
+            [ css
+                [ margin2 (px 8) zero
+                , fontSize (px 18)
+                ]
+            ]
+            [ text internals.title ]
+        ]
 
 
-viewPreview : Movie a -> List Genre -> List MovieId -> (MovieId -> msg) -> (MovieId -> msg) -> Html msg
+viewPreview : PreviewMovie -> List Genre -> List MovieId -> (MovieId -> msg) -> (MovieId -> msg) -> Html msg
 viewPreview movie genres favoriteMovies addToFavorites removeFromFavorites =
     let
-        (Movie internals _) =
+        (Movie internals (Preview genreIds)) =
             movie
 
         movieGenres =
-            List.filter (\genre -> List.member genre.id internals.genreIds) genres
+            List.filter (\genre -> List.member genre.id genreIds) genres
 
         movieReleaseDate =
             internals.releaseDate
@@ -200,29 +218,43 @@ viewRemoveFromFavoriteButton movieId toMsg =
 -- SERIALIZATION
 
 
-decode : (Internals -> Movie a) -> Decoder (Movie a)
-decode mapper =
-    D.map mapper internalsDecoder
-
-
 decoder : Decoder (Movie Full)
 decoder =
-    decode (\internals -> Movie internals Full)
+    D.map2
+        (\internals genres -> Movie internals <| Full genres)
+        fullInternalsDecoder
+        (D.field "genres" <| D.list Genre.decoder)
 
 
 previewDecoder : Decoder (Movie Preview)
 previewDecoder =
-    decode (\internals -> Movie internals Preview)
+    D.map2
+        (\internals genreIds -> Movie internals <| Preview genreIds)
+        previewInternalsDecoder
+        (D.field "genre_ids" <| D.list D.int)
 
 
-internalsDecoder : Decoder Internals
-internalsDecoder =
+previewInternalsDecoder : Decoder Internals
+previewInternalsDecoder =
     succeed Internals
         |> DP.required "id" MovieId.decoder
         |> DP.required "title" D.string
         |> DP.required "vote_average" D.float
-        -- TODO "genres" or "genre_ids"
-        |> DP.optional "genre_ids" (D.list D.int) []
+        |> DP.required "original_language" D.string
+        |> DP.required "original_title" D.string
+        |> DP.required "overview" D.string
+        |> DP.required "poster_path" (D.nullable D.string)
+        |> DP.optional "release_date" D.string "Unknown"
+        |> DP.required "backdrop_path" (D.nullable D.string)
+        |> DP.required "adult" D.bool
+
+
+fullInternalsDecoder : Decoder Internals
+fullInternalsDecoder =
+    succeed Internals
+        |> DP.required "id" MovieId.decoder
+        |> DP.required "title" D.string
+        |> DP.required "vote_average" D.float
         |> DP.required "original_language" D.string
         |> DP.required "original_title" D.string
         |> DP.required "overview" D.string

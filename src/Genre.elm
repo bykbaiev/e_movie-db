@@ -1,4 +1,4 @@
-module Genre exposing (Genre, fetch, viewList)
+module Genre exposing (Genre, decoder, fetch, viewList)
 
 import Api exposing (baseUrl)
 import Css exposing (..)
@@ -79,11 +79,11 @@ fetch session =
 genresDecoder : Decoder (List Genre)
 genresDecoder =
     Json.Decode.succeed identity
-        |> DPipeline.required "genres" (Json.Decode.list genreDecoder)
+        |> DPipeline.required "genres" (Json.Decode.list decoder)
 
 
-genreDecoder : Decoder Genre
-genreDecoder =
+decoder : Decoder Genre
+decoder =
     Json.Decode.succeed Genre
         |> DPipeline.required "id" Json.Decode.int
         |> DPipeline.required "name" Json.Decode.string

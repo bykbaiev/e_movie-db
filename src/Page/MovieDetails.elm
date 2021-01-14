@@ -175,7 +175,7 @@ viewMovie model =
             text "Loading"
 
         Success movie ->
-            Movie.view movie [] [] SelectedFavoriteMovie RemovedFavoriteMovie
+            Movie.view movie [] SelectedFavoriteMovie RemovedFavoriteMovie
 
         Failure err ->
             viewErrorMessage err
