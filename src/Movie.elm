@@ -1,16 +1,28 @@
-module Movie exposing (FullMovie, PreviewMovie, decoder, id, previewDecoder, view)
+module Movie exposing
+    ( FullMovie
+    , PreviewMovie
+    , decoder
+    , fetch
+    , id
+    , previewDecoder
+    , view
+    )
 
-import Api
+import Api exposing (baseUrl)
 import Css exposing (..)
 import DateFormat
 import Genre exposing (GenresResults)
 import Html.Styled exposing (Html, a, button, div, img, p, text)
 import Html.Styled.Attributes exposing (css, href, src)
 import Html.Styled.Events exposing (onClick)
+import Http
 import Iso8601 exposing (toTime)
 import Json.Decode as D exposing (Decoder, succeed)
 import Json.Decode.Pipeline as DP
 import MovieId exposing (MovieId)
+import RequestHelpers
+import Route
+import Session exposing (Session)
 import Task exposing (Task)
 import Time
 import ViewHelpers
@@ -112,7 +124,7 @@ view movie genres favoriteMovies addToFavorites removeFromFavorites =
             ]
             [ div []
                 [ a
-                    [ href "#"
+                    [ Route.href <| Route.Movie <| id movie
                     , css
                         [ margin2 (px 8) zero
                         , fontSize (px 18)
@@ -244,3 +256,19 @@ poster (Movie internals _) =
 id : Movie a -> MovieId
 id (Movie internals _) =
     internals.id
+
+
+
+-- FETCH
+
+
+fetch : Session -> MovieId -> Task Http.Error FullMovie
+fetch session movieId =
+    let
+        query =
+            Maybe.withDefault "" <| Session.tokenQueryParam session
+
+        url =
+            baseUrl ++ "movie/" ++ MovieId.toString movieId ++ "?" ++ query
+    in
+    RequestHelpers.fetch url decoder

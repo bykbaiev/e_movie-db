@@ -6,7 +6,9 @@ import Css exposing (..)
 import Html.Styled as Html exposing (..)
 import Html.Styled.Attributes exposing (css)
 import Json.Decode exposing (Value)
+import MovieId
 import Page.Home as Home
+import Page.MovieDetails as MovieDetails
 import Route exposing (Route)
 import Session exposing (Session)
 import StyledDocument exposing (StyledDocument)
@@ -19,6 +21,7 @@ import Url exposing (Url)
 
 type Model
     = Home Home.Model
+    | MovieDetails MovieDetails.Model
     | NotFound Session
 
 
@@ -41,6 +44,9 @@ subscriptions model =
         Home home ->
             Sub.map GotHomeMsg (Home.subscriptions home)
 
+        MovieDetails movie ->
+            Sub.map GotMovieDetailsMsg (MovieDetails.subscriptions movie)
+
         NotFound _ ->
             Sub.none
 
@@ -51,6 +57,7 @@ subscriptions model =
 
 type Msg
     = GotHomeMsg Home.Msg
+    | GotMovieDetailsMsg MovieDetails.Msg
     | ClickedLink Browser.UrlRequest
     | ChangedUrl Url
 
@@ -64,6 +71,13 @@ update msg model =
                     Home.update homeMsg home
             in
             ( Home newModel, Cmd.map GotHomeMsg cmd )
+
+        ( GotMovieDetailsMsg movieMsg, MovieDetails movie ) ->
+            let
+                ( newModel, cmd ) =
+                    MovieDetails.update movieMsg movie
+            in
+            ( MovieDetails newModel, Cmd.map GotMovieDetailsMsg cmd )
 
         ( ClickedLink urlRequest, _ ) ->
             case urlRequest of
@@ -94,8 +108,9 @@ changeRouteTo maybeRoute model =
             Home.init session
                 |> updateModelWith Home GotHomeMsg
 
-        Just _ ->
-            ( NotFound session, Cmd.none )
+        Just (Route.Movie id) ->
+            MovieDetails.init session id
+                |> updateModelWith MovieDetails GotMovieDetailsMsg
 
 
 updateModelWith : (model -> Model) -> (msg -> Msg) -> ( model, Cmd msg ) -> ( Model, Cmd Msg )
@@ -108,6 +123,9 @@ getSession model =
     case model of
         Home home ->
             home.session
+
+        MovieDetails movie ->
+            movie.session
 
         NotFound session ->
             session
@@ -129,7 +147,14 @@ view model =
                     in
                     { title = title, body = List.map (Html.map GotHomeMsg) body }
 
-                NotFound session ->
+                MovieDetails movie ->
+                    let
+                        { title, body } =
+                            MovieDetails.view movie
+                    in
+                    { title = title, body = List.map (Html.map GotMovieDetailsMsg) body }
+
+                NotFound _ ->
                     { title = "Movie data base"
                     , body =
                         [ div [] [ text "New application?!" ] ]

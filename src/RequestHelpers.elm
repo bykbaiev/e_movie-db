@@ -1,7 +1,25 @@
-module RequestHelpers exposing (handleJsonResponse, queryParam, toString)
+module RequestHelpers exposing
+    ( fetch
+    , handleJsonResponse
+    , queryParam
+    , toString
+    )
 
 import Http
 import Json.Decode exposing (Decoder)
+import Task exposing (Task)
+
+
+fetch : String -> Decoder a -> Task Http.Error a
+fetch url decoder =
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = url
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver <| handleJsonResponse <| decoder
+        , timeout = Nothing
+        }
 
 
 handleJsonResponse : Decoder a -> Http.Response String -> Result Http.Error a

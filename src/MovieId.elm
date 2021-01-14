@@ -3,12 +3,14 @@ module MovieId exposing
     , decoder
     , encode
     , fromInt
+    , parser
     , toInt
     , toString
     )
 
 import Json.Decode as D exposing (Decoder)
 import Json.Encode as E
+import Url.Parser exposing (Parser)
 
 
 type MovieId
@@ -27,6 +29,15 @@ decoder =
 encode : MovieId -> E.Value
 encode (MovieId id) =
     E.int id
+
+
+
+-- PARSING
+
+
+parser : Parser (MovieId -> a) a
+parser =
+    Url.Parser.custom "USERNAME" <| Maybe.map MovieId << String.toInt
 
 
 

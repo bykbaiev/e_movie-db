@@ -441,7 +441,7 @@ fetchFeed model page =
             fetchFavoriteMovies model
 
         Recommendations ->
-            Task.attempt GotFeed <| Task.fail Http.NetworkError
+            fetchRecommendations model
 
 
 fetchMainFeed : Model -> Int -> Task Http.Error Feed
@@ -477,7 +477,7 @@ fetchMainFeed model page =
         url =
             baseUrl ++ mainUrl ++ query
     in
-    fetch url feedDecoder
+    RequestHelpers.fetch url feedDecoder
 
 
 fetchFavoriteMovies : Model -> Cmd Msg
@@ -492,14 +492,8 @@ fetchFavoriteMovies model =
         url id =
             baseUrl ++ "movie/" ++ id ++ "?" ++ query
 
-        requestsNumber =
-            List.length ids
-
         requests =
-            List.map (\id -> fetch (url <| MovieId.toString id) Movie.previewDecoder) ids
-
-        _ =
-            Debug.log "number" requestsNumber
+            List.map (\id -> RequestHelpers.fetch (url <| MovieId.toString id) Movie.previewDecoder) ids
     in
     case requests of
         [] ->
@@ -509,33 +503,27 @@ fetchFavoriteMovies model =
             Cmd.batch (List.map (Task.attempt (GotInBetweenFeedMovie model.tab)) requests)
 
 
+fetchRecommendations : Model -> Cmd Msg
+fetchRecommendations model =
+    let
+        ids =
+            Session.favoriteMovies model.session
 
--- requests
---     |> List.indexedMap
---         (\index task ->
---             Task.attempt
---                 (\result ->
---                     case result of
---                         Just value ->
---                             PartialFavoriteSuccess
---                         Err msg ->
---                             GotFeed <| Result.Err msg
---                 )
---                 task
---         )
---     |> Cmd.batch
+        query =
+            Maybe.withDefault "" <| Session.tokenQueryParam model.session
 
+        url id =
+            baseUrl ++ "movie/" ++ id ++ "?" ++ query
 
-fetch : String -> Decoder a -> Task Http.Error a
-fetch url decoder =
-    Http.task
-        { method = "GET"
-        , headers = []
-        , url = url
-        , body = Http.emptyBody
-        , resolver = Http.stringResolver <| handleJsonResponse <| decoder
-        , timeout = Nothing
-        }
+        requests =
+            List.map (\id -> RequestHelpers.fetch (url <| MovieId.toString id) Movie.previewDecoder) ids
+    in
+    case requests of
+        [] ->
+            Task.attempt GotFeed <| Task.succeed (Feed [] 1 1 0)
+
+        _ ->
+            Cmd.batch (List.map (Task.attempt (GotInBetweenFeedMovie model.tab)) requests)
 
 
 
