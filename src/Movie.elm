@@ -1,4 +1,4 @@
-module Movie exposing (PreviewMovie, id, previewDecoder, view)
+module Movie exposing (FullMovie, PreviewMovie, decoder, id, previewDecoder, view)
 
 import Api
 import Css exposing (..)
@@ -43,8 +43,16 @@ type Preview
     = Preview
 
 
+type Full
+    = Full
+
+
 type alias PreviewMovie =
     Movie Preview
+
+
+type alias FullMovie =
+    Movie Full
 
 
 
@@ -174,14 +182,19 @@ viewRemoveFromFavoriteButton movieId toMsg =
 -- SERIALIZATION
 
 
-decoder : (Internals -> Movie a) -> Decoder (Movie a)
-decoder mapper =
+decode : (Internals -> Movie a) -> Decoder (Movie a)
+decode mapper =
     D.map mapper internalsDecoder
+
+
+decoder : Decoder (Movie Full)
+decoder =
+    decode (\internals -> Movie internals Full)
 
 
 previewDecoder : Decoder (Movie Preview)
 previewDecoder =
-    decoder (\internals -> Movie internals Preview)
+    decode (\internals -> Movie internals Preview)
 
 
 internalsDecoder : Decoder Internals
@@ -190,7 +203,8 @@ internalsDecoder =
         |> DP.required "id" MovieId.decoder
         |> DP.required "title" D.string
         |> DP.required "vote_average" D.float
-        |> DP.required "genre_ids" (D.list D.int)
+        -- TODO "genres" or "genre_ids"
+        |> DP.optional "genre_ids" (D.list D.int) []
         |> DP.required "original_language" D.string
         |> DP.required "original_title" D.string
         |> DP.required "overview" D.string
@@ -207,10 +221,6 @@ internalsDecoder =
 mapSrc : Maybe String -> String
 mapSrc =
     Maybe.withDefault "" << Maybe.map ((++) Api.imageUrl)
-
-
-
---(\src -> Api.imageUrl ++ src)
 
 
 poster : Movie a -> String

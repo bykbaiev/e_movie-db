@@ -18,7 +18,7 @@ import Html.Styled.Lazy exposing (lazy, lazy5)
 import Http
 import Json.Decode as D exposing (Decoder, Value, succeed)
 import Json.Decode.Pipeline as DP
-import Movie exposing (PreviewMovie)
+import Movie exposing (FullMovie, PreviewMovie)
 import MovieId exposing (MovieId)
 import Ports exposing (onSessionChange, storeSession)
 import Regex exposing (Options)
@@ -49,9 +49,13 @@ type alias Feed =
 
 
 type Status a
-    = Loading
+    = Loading (Maybe (List PreviewMovie))
     | Success a
     | Failure String
+
+
+type alias RequestTracker =
+    String
 
 
 
@@ -65,6 +69,7 @@ type alias Model =
     , tab : Tab
     , feed : Status Feed
     , genres : Status (List Genre)
+    , trackers : List RequestTracker
     }
 
 
@@ -76,13 +81,14 @@ init session =
             , query = ""
             , searchOptions = SearchOptions.initialModel
             , tab = Main
-            , feed = Loading
-            , genres = Loading
+            , feed = Loading Nothing
+            , genres = Loading Nothing
+            , trackers = []
             }
     in
     ( model
     , Cmd.batch
-        [ Task.attempt GotFeed <| fetchFeed model 1
+        [ fetchFeed model 1
         , Task.attempt GotGenres <| Genre.fetch session
         ]
     )
@@ -96,6 +102,7 @@ type Msg
     = ChangedQuery String
     | Search
     | GotFeed (Result Http.Error Feed)
+    | GotInBetweenFeedMovie Tab (Result Http.Error PreviewMovie)
     | GotGenres (Result Http.Error (List Genre))
     | Options SearchOptions.Msg
     | ChangedPage Int
@@ -103,6 +110,7 @@ type Msg
     | SelectedFavoriteMovie MovieId
     | GotSession Session
     | RemovedFavoriteMovie MovieId
+    | SetTrackers (List RequestTracker)
     | NoMsg
 
 
@@ -110,8 +118,10 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Search ->
-            ( { model | feed = Loading }
-            , Task.attempt GotFeed <| fetchFeed model 1
+            ( { model
+                | feed = Loading Nothing
+              }
+            , fetchFeed model 1
             )
 
         ChangedQuery query ->
@@ -124,14 +134,14 @@ update msg model =
 
                 updatedModel =
                     if shouldReload then
-                        { model | searchOptions = searchOptions, feed = Loading }
+                        { model | searchOptions = searchOptions, feed = Loading Nothing }
 
                     else
                         { model | searchOptions = searchOptions }
 
                 cmd =
                     if shouldReload then
-                        Task.attempt GotFeed <| fetchFeed updatedModel 1
+                        fetchFeed updatedModel 1
 
                     else
                         Cmd.none
@@ -139,8 +149,8 @@ update msg model =
             ( updatedModel, cmd )
 
         ChangedPage page ->
-            ( { model | feed = Loading }
-            , Task.attempt GotFeed <| fetchFeed model page
+            ( { model | feed = Loading Nothing }
+            , fetchFeed model page
             )
 
         GotFeed feedResults ->
@@ -151,13 +161,24 @@ update msg model =
                 Ok feed ->
                     ( { model | feed = Success feed }, Cmd.none )
 
+        -- TODO add handler
+        GotInBetweenFeedMovie tab movieResults ->
+            if tab == model.tab then
+                ( withInBetweenFeedMovie movieResults model, Cmd.none )
+
+            else
+                ( model, Cmd.none )
+
+        SetTrackers trackers ->
+            ( { model | trackers = trackers }, Cmd.none )
+
         ChangedTab tab ->
             let
                 updatedModel =
-                    { model | tab = tab, feed = Loading }
+                    { model | tab = tab, feed = Loading Nothing }
             in
             ( updatedModel
-            , Task.attempt GotFeed <| fetchFeed updatedModel 1
+            , fetchFeed updatedModel 1
             )
 
         GotGenres genresResults ->
@@ -237,10 +258,10 @@ viewTab model =
 viewTabData : Model -> Html Msg
 viewTabData model =
     case ( model.feed, model.genres ) of
-        ( Loading, _ ) ->
+        ( Loading _, _ ) ->
             text "Loading..."
 
-        ( _, Loading ) ->
+        ( _, Loading _ ) ->
             text "Loading..."
 
         ( Failure feedMsg, _ ) ->
@@ -409,17 +430,17 @@ subscriptions model =
 -- FETCH
 
 
-fetchFeed : Model -> Int -> Task Http.Error Feed
+fetchFeed : Model -> Int -> Cmd Msg
 fetchFeed model page =
     case model.tab of
         Main ->
-            fetchMainFeed model page
+            Task.attempt GotFeed <| fetchMainFeed model page
 
         Favorite ->
             fetchFavoriteMovies model
 
         Recommendations ->
-            Task.fail Http.NetworkError
+            Task.attempt GotFeed <| Task.fail Http.NetworkError
 
 
 fetchMainFeed : Model -> Int -> Task Http.Error Feed
@@ -454,20 +475,57 @@ fetchMainFeed model page =
 
         url =
             baseUrl ++ mainUrl ++ query
+
+        tracker =
+            "MainTabFeedRequest"
     in
     fetch url feedDecoder
 
 
-fetchFavoriteMovies : Model -> Task Http.Error Feed
+fetchFavoriteMovies : Model -> Cmd Msg
 fetchFavoriteMovies model =
     let
         ids =
             Session.favoriteMovies model.session
 
+        query =
+            Maybe.withDefault "" <| Session.tokenQueryParam model.session
+
+        url id =
+            baseUrl ++ "movie/" ++ id ++ "?" ++ query
+
+        requestsNumber =
+            List.length ids
+
+        requests =
+            List.map (\id -> fetch (url <| MovieId.toString id) Movie.previewDecoder) ids
+
         _ =
-            Debug.log "favorite" ids
+            Debug.log "number" requestsNumber
     in
-    Task.fail Http.NetworkError
+    case requests of
+        [] ->
+            Task.attempt GotFeed <| Task.fail (Http.BadUrl "There are no any movies")
+
+        request :: _ ->
+            Task.attempt (GotInBetweenFeedMovie model.tab) request
+
+
+
+-- requests
+--     |> List.indexedMap
+--         (\index task ->
+--             Task.attempt
+--                 (\result ->
+--                     case result of
+--                         Just value ->
+--                             PartialFavoriteSuccess
+--                         Err msg ->
+--                             GotFeed <| Result.Err msg
+--                 )
+--                 task
+--         )
+--     |> Cmd.batch
 
 
 fetch : String -> Decoder a -> Task Http.Error a
@@ -499,9 +557,22 @@ feedDecoder =
 -- TRANSFORMATION
 
 
-mapSearchOptions : SearchOptions.Options -> Model -> Model
-mapSearchOptions searchOptions model =
-    { model | searchOptions = searchOptions }
+withInBetweenFeedMovie : Result Http.Error PreviewMovie -> Model -> Model
+withInBetweenFeedMovie movieResults model =
+    case model.feed of
+        Loading maybeMovies ->
+            case movieResults of
+                Err error ->
+                    { model | feed = Failure <| RequestHelpers.toString error }
+
+                Ok movie ->
+                    { model | feed = Loading (Just <| movie :: Maybe.withDefault [] maybeMovies) }
+
+        Success _ ->
+            model
+
+        Failure _ ->
+            model
 
 
 

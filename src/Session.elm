@@ -70,17 +70,9 @@ decode : Nav.Key -> Value -> Session
 decode key value =
     case D.decodeValue (decoder key) value of
         Ok session ->
-            let
-                _ =
-                    Debug.log "Successful decoding" session
-            in
             session
 
-        Err e ->
-            let
-                _ =
-                    Debug.log "decoding error" e
-            in
+        Err _ ->
             Session key
                 emptyCommon
                 []
