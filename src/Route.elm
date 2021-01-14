@@ -38,7 +38,7 @@ toString : Route -> String
 toString route =
     case route of
         Root ->
-            ""
+            "/"
 
         Movie id ->
-            "movie/" ++ MovieId.toString id
+            "/movie/" ++ MovieId.toString id

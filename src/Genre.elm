@@ -1,4 +1,4 @@
-module Genre exposing (Genre, GenresResults, fetch, viewList)
+module Genre exposing (Genre, fetch, viewList)
 
 import Api exposing (baseUrl)
 import Css exposing (..)
@@ -7,7 +7,7 @@ import Html.Styled.Attributes exposing (css)
 import Http
 import Json.Decode exposing (Decoder)
 import Json.Decode.Pipeline as DPipeline
-import RequestHelpers exposing (handleJsonResponse, queryParam)
+import RequestHelpers exposing (handleJsonResponse)
 import Session exposing (Session)
 import Task exposing (Task)
 
@@ -20,10 +20,6 @@ type alias Genre =
     { id : Int
     , name : String
     }
-
-
-type alias GenresResults =
-    List Genre
 
 
 
@@ -58,7 +54,7 @@ viewGenreChip genre =
 -- FETCH GENRES
 
 
-fetch : Session -> Task Http.Error GenresResults
+fetch : Session -> Task Http.Error (List Genre)
 fetch session =
     let
         url =
@@ -80,7 +76,7 @@ fetch session =
 -- SERIALIZATION
 
 
-genresDecoder : Decoder GenresResults
+genresDecoder : Decoder (List Genre)
 genresDecoder =
     Json.Decode.succeed identity
         |> DPipeline.required "genres" (Json.Decode.list genreDecoder)

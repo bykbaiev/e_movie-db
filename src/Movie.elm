@@ -6,12 +6,13 @@ module Movie exposing
     , id
     , previewDecoder
     , view
+    , viewPreview
     )
 
 import Api exposing (baseUrl)
 import Css exposing (..)
 import DateFormat
-import Genre exposing (GenresResults)
+import Genre exposing (Genre)
 import Html.Styled exposing (Html, a, button, div, img, p, text)
 import Html.Styled.Attributes exposing (css, href, src)
 import Html.Styled.Events exposing (onClick)
@@ -71,8 +72,13 @@ type alias FullMovie =
 -- VIEW
 
 
-view : Movie a -> GenresResults -> List MovieId -> (MovieId -> msg) -> (MovieId -> msg) -> Html msg
+view : FullMovie -> List Genre -> List MovieId -> (MovieId -> msg) -> (MovieId -> msg) -> Html msg
 view movie genres favoriteMovies addToFavorites removeFromFavorites =
+    div [] []
+
+
+viewPreview : Movie a -> List Genre -> List MovieId -> (MovieId -> msg) -> (MovieId -> msg) -> Html msg
+viewPreview movie genres favoriteMovies addToFavorites removeFromFavorites =
     let
         (Movie internals _) =
             movie

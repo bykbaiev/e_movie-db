@@ -320,7 +320,7 @@ viewFeed model =
 viewKeyedSearchResult : List Genre -> List MovieId -> PreviewMovie -> ( String, Html Msg )
 viewKeyedSearchResult genres favoriteMovies movie =
     ( MovieId.toString <| Movie.id movie
-    , lazy5 Movie.view movie genres favoriteMovies SelectedFavoriteMovie RemovedFavoriteMovie
+    , lazy5 Movie.viewPreview movie genres favoriteMovies SelectedFavoriteMovie RemovedFavoriteMovie
     )
 
 
