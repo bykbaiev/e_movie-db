@@ -49,9 +49,15 @@ type alias Feed =
 
 
 type Status a
-    = Loading (Maybe (List PreviewMovie))
+    = Loading
     | Success a
     | Failure String
+
+
+type FeedStatus
+    = FeedLoading (Maybe (List PreviewMovie))
+    | FeedSuccess Feed
+    | FeedFailure String
 
 
 
@@ -63,7 +69,7 @@ type alias Model =
     , query : String
     , searchOptions : SearchOptions.Options -- TODO move logic here, make SearchOptions simple module without TEA
     , tab : Tab
-    , feed : Status Feed
+    , feed : FeedStatus
     , genres : Status (List Genre)
     }
 
@@ -76,8 +82,8 @@ init session =
             , query = ""
             , searchOptions = SearchOptions.initialModel
             , tab = Main
-            , feed = Loading Nothing
-            , genres = Loading Nothing
+            , feed = FeedLoading Nothing
+            , genres = Loading
             }
     in
     ( model
@@ -112,7 +118,7 @@ update msg model =
     case msg of
         Search ->
             ( { model
-                | feed = Loading Nothing
+                | feed = FeedLoading Nothing
               }
             , fetchFeed model 1
             )
@@ -127,7 +133,7 @@ update msg model =
 
                 updatedModel =
                     if shouldReload then
-                        { model | searchOptions = searchOptions, feed = Loading Nothing }
+                        { model | searchOptions = searchOptions, feed = FeedLoading Nothing }
 
                     else
                         { model | searchOptions = searchOptions }
@@ -142,17 +148,17 @@ update msg model =
             ( updatedModel, cmd )
 
         ChangedPage page ->
-            ( { model | feed = Loading Nothing }
+            ( { model | feed = FeedLoading Nothing }
             , fetchFeed model page
             )
 
         GotFeed feedResults ->
             case feedResults of
                 Err error ->
-                    ( { model | feed = Failure <| RequestHelpers.toString error }, Cmd.none )
+                    ( { model | feed = FeedFailure <| RequestHelpers.toString error }, Cmd.none )
 
                 Ok feed ->
-                    ( { model | feed = Success feed }, Cmd.none )
+                    ( { model | feed = FeedSuccess feed }, Cmd.none )
 
         -- TODO add handler
         GotInBetweenFeedMovie tab movieResults ->
@@ -165,7 +171,7 @@ update msg model =
         ChangedTab tab ->
             let
                 updatedModel =
-                    { model | tab = tab, feed = Loading Nothing }
+                    { model | tab = tab, feed = FeedLoading Nothing }
             in
             ( updatedModel
             , fetchFeed updatedModel 1
@@ -248,19 +254,19 @@ viewTab model =
 viewTabData : Model -> Html Msg
 viewTabData model =
     case ( model.feed, model.genres ) of
-        ( Loading _, _ ) ->
+        ( FeedLoading _, _ ) ->
             text "Loading..."
 
-        ( _, Loading _ ) ->
+        ( _, Loading ) ->
             text "Loading..."
 
-        ( Failure feedMsg, _ ) ->
+        ( FeedFailure feedMsg, _ ) ->
             viewErrorMessage feedMsg
 
         ( _, Failure genresMsg ) ->
             viewErrorMessage genresMsg
 
-        ( Success _, Success _ ) ->
+        ( FeedSuccess _, Success _ ) ->
             div [] <| viewFeed model
 
 
@@ -294,13 +300,18 @@ viewErrorMessage msg =
 viewFeed : Model -> List (Html Msg)
 viewFeed model =
     case ( model.feed, model.genres ) of
-        ( Success feedData, Success genresData ) ->
-            [ Html.Styled.Keyed.node
-                "div"
-                [ class "results" ]
-                (List.map (viewKeyedSearchResult genresData (Session.favoriteMovies model.session)) feedData.movies)
-            , lazy viewPagination { page = feedData.page, total = feedData.totalPages }
-            ]
+        ( FeedSuccess feedData, Success genresData ) ->
+            case feedData.movies of
+                [] ->
+                    [ div [] [ text "There are no any movies" ] ]
+
+                _ ->
+                    [ Html.Styled.Keyed.node
+                        "div"
+                        [ class "results" ]
+                        (List.map (viewKeyedSearchResult genresData (Session.favoriteMovies model.session)) feedData.movies)
+                    , lazy viewPagination { page = feedData.page, total = feedData.totalPages }
+                    ]
 
         ( _, _ ) ->
             []
@@ -465,9 +476,6 @@ fetchMainFeed model page =
 
         url =
             baseUrl ++ mainUrl ++ query
-
-        tracker =
-            "MainTabFeedRequest"
     in
     fetch url feedDecoder
 
@@ -493,7 +501,12 @@ fetchFavoriteMovies model =
         _ =
             Debug.log "number" requestsNumber
     in
-    Cmd.batch (List.map (Task.attempt (GotInBetweenFeedMovie model.tab)) requests)
+    case requests of
+        [] ->
+            Task.attempt GotFeed <| Task.succeed (Feed [] 1 1 0)
+
+        _ ->
+            Cmd.batch (List.map (Task.attempt (GotInBetweenFeedMovie model.tab)) requests)
 
 
 
@@ -549,10 +562,10 @@ withInBetweenFeedMovie movieResults model =
             List.length <| Session.favoriteMovies model.session
     in
     case model.feed of
-        Loading maybeMovies ->
+        FeedLoading maybeMovies ->
             case movieResults of
                 Err error ->
-                    { model | feed = Failure <| RequestHelpers.toString error }
+                    { model | feed = FeedFailure <| RequestHelpers.toString error }
 
                 Ok movie ->
                     let
@@ -563,15 +576,15 @@ withInBetweenFeedMovie movieResults model =
                             List.length movies == count
                     in
                     if enough then
-                        { model | feed = Success { movies = movies, page = 1, totalPages = 1, totalResults = count } }
+                        { model | feed = FeedSuccess { movies = movies, page = 1, totalPages = 1, totalResults = count } }
 
                     else
-                        { model | feed = Loading (Just movies) }
+                        { model | feed = FeedLoading (Just movies) }
 
-        Success _ ->
+        FeedSuccess _ ->
             model
 
-        Failure _ ->
+        FeedFailure _ ->
             model
 
 
