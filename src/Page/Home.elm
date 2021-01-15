@@ -515,23 +515,12 @@ fetchFavoriteMovies model =
     let
         ids =
             Session.favoriteMovies model.session
-
-        query =
-            Maybe.withDefault "" <| Session.tokenQueryParam model.session
-
-        url id =
-            baseUrl ++ "movie/" ++ id ++ "?" ++ query
-
-        requests =
-            List.map
-                (\id -> RequestHelpers.fetch (url <| MovieId.toString id) (D.map Movie.toPreview Movie.decoder))
-                ids
     in
-    case requests of
+    case List.map (Movie.fetchPreview model.session) ids of
         [] ->
             Task.attempt GotFeed <| Task.succeed (Feed [] 1 1 0)
 
-        _ ->
+        requests ->
             Cmd.batch (List.map (Task.attempt (GotInBetweenFeedMovie model.tab)) requests)
 
 
@@ -540,21 +529,12 @@ fetchRecommendations model =
     let
         ids =
             Session.favoriteMovies model.session
-
-        query =
-            Maybe.withDefault "" <| Session.tokenQueryParam model.session
-
-        url id =
-            baseUrl ++ "movie/" ++ id ++ "?" ++ query
-
-        requests =
-            List.map (\id -> RequestHelpers.fetch (url <| MovieId.toString id) (D.map Movie.toPreview Movie.decoder)) ids
     in
-    case requests of
+    case List.map (Movie.fetchPreview model.session) ids of
         [] ->
             Task.attempt GotFeed <| Task.succeed (Feed [] 1 1 0)
 
-        _ ->
+        requests ->
             Cmd.batch (List.map (Task.attempt (GotInBetweenFeedMovie model.tab)) requests)
 
 

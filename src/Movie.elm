@@ -5,6 +5,7 @@ module Movie exposing
     , decoder
     , fetch
     , fetchList
+    , fetchPreview
     , fetchRecommendations
     , id
     , previewDecoder
@@ -372,6 +373,16 @@ id (Movie internals _) =
 
 fetch : Session -> MovieId -> Task Http.Error FullMovie
 fetch session movieId =
+    fetchMovie session movieId decoder
+
+
+fetchPreview : Session -> MovieId -> Task Http.Error PreviewMovie
+fetchPreview session movieId =
+    fetchMovie session movieId (D.map toPreview decoder)
+
+
+fetchMovie : Session -> MovieId -> Decoder a -> Task Http.Error a
+fetchMovie session movieId movieDecoder =
     let
         query =
             Maybe.withDefault "" <| Session.tokenQueryParam session
@@ -379,7 +390,7 @@ fetch session movieId =
         url =
             baseUrl ++ "movie/" ++ MovieId.toString movieId ++ "?" ++ query
     in
-    RequestHelpers.fetch url decoder
+    RequestHelpers.fetch url movieDecoder
 
 
 fetchList : String -> Task Http.Error Feed
