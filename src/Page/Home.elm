@@ -18,6 +18,7 @@ import Html.Styled.Lazy exposing (lazy, lazy5)
 import Http
 import Json.Decode as D exposing (Decoder, Value, succeed)
 import Json.Decode.Pipeline as DP
+import Loader
 import Movie exposing (FullMovie, PreviewMovie)
 import MovieId exposing (MovieId)
 import Ports exposing (onSessionChange, storeSession)
@@ -50,12 +51,14 @@ type alias Feed =
 
 type Status a
     = Loading
+    | LoadingSlowly
     | Success a
     | Failure String
 
 
 type FeedStatus
     = FeedLoading (Maybe (List PreviewMovie))
+    | FeedLoadingSlowly (Maybe (List PreviewMovie))
     | FeedSuccess Feed
     | FeedFailure String
 
@@ -90,6 +93,7 @@ init session =
     , Cmd.batch
         [ fetchFeed model 1
         , Task.attempt GotGenres <| Genre.fetch session
+        , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
         ]
     )
 
@@ -110,6 +114,7 @@ type Msg
     | SelectedFavoriteMovie MovieId
     | GotSession Session
     | RemovedFavoriteMovie MovieId
+    | PassedSlowLoadThreshold
     | NoMsg
 
 
@@ -120,7 +125,10 @@ update msg model =
             ( { model
                 | feed = FeedLoading Nothing
               }
-            , fetchFeed model 1
+            , Cmd.batch
+                [ fetchFeed model 1
+                , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
+                ]
             )
 
         ChangedQuery query ->
@@ -140,7 +148,10 @@ update msg model =
 
                 cmd =
                     if shouldReload then
-                        fetchFeed updatedModel 1
+                        Cmd.batch
+                            [ fetchFeed updatedModel 1
+                            , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
+                            ]
 
                     else
                         Cmd.none
@@ -149,7 +160,10 @@ update msg model =
 
         ChangedPage page ->
             ( { model | feed = FeedLoading Nothing }
-            , fetchFeed model page
+            , Cmd.batch
+                [ fetchFeed model page
+                , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
+                ]
             )
 
         GotFeed feedResults ->
@@ -173,7 +187,10 @@ update msg model =
                     { model | tab = tab, feed = FeedLoading Nothing }
             in
             ( updatedModel
-            , fetchFeed updatedModel 1
+            , Cmd.batch
+                [ fetchFeed updatedModel 1
+                , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
+                ]
             )
 
         GotGenres genresResults ->
@@ -200,6 +217,26 @@ update msg model =
 
         GotSession session ->
             ( { model | session = session }, Cmd.none )
+
+        PassedSlowLoadThreshold ->
+            let
+                feed =
+                    case model.feed of
+                        FeedLoading movies ->
+                            FeedLoadingSlowly movies
+
+                        other ->
+                            other
+
+                genres =
+                    case model.genres of
+                        Loading ->
+                            LoadingSlowly
+
+                        other ->
+                            other
+            in
+            ( { model | feed = feed, genres = genres }, Cmd.none )
 
         NoMsg ->
             ( model, Cmd.none )
@@ -253,11 +290,11 @@ viewTab model =
 viewTabData : Model -> Html Msg
 viewTabData model =
     case ( model.feed, model.genres ) of
-        ( FeedLoading _, _ ) ->
-            text "Loading..."
+        ( FeedLoadingSlowly _, _ ) ->
+            Loader.view
 
-        ( _, Loading ) ->
-            text "Loading..."
+        ( _, LoadingSlowly ) ->
+            Loader.view
 
         ( FeedFailure feedMsg, _ ) ->
             viewErrorMessage feedMsg
@@ -267,6 +304,9 @@ viewTabData model =
 
         ( FeedSuccess _, Success _ ) ->
             div [] <| viewFeed model
+
+        ( _, _ ) ->
+            div [] []
 
 
 viewTabButton : Tab -> Tab -> String -> Html Msg
@@ -552,44 +592,52 @@ withInBetweenFeedMovie movieResults model =
     in
     case model.feed of
         FeedLoading maybeMovies ->
-            case movieResults of
-                Err error ->
-                    { model | feed = FeedFailure <| RequestHelpers.toString error }
+            withInBetweenFeedMovieLoading movieResults maybeMovies count model
 
-                Ok movie ->
-                    let
-                        movies =
-                            movie :: Maybe.withDefault [] maybeMovies
-
-                        ids =
-                            Session.favoriteMovies model.session
-
-                        findIndexWithDefault item list =
-                            Maybe.withDefault -1 <| findIndex (Movie.id item) list
-
-                        sorted =
-                            List.sortWith
-                                (\left right ->
-                                    compare
-                                        (findIndexWithDefault left ids)
-                                        (findIndexWithDefault right ids)
-                                )
-                                movies
-
-                        enough =
-                            List.length movies == count
-                    in
-                    if enough then
-                        { model | feed = FeedSuccess <| Feed sorted 1 1 count }
-
-                    else
-                        { model | feed = FeedLoading (Just sorted) }
+        FeedLoadingSlowly maybeMovies ->
+            withInBetweenFeedMovieLoading movieResults maybeMovies count model
 
         FeedSuccess _ ->
             model
 
         FeedFailure _ ->
             model
+
+
+withInBetweenFeedMovieLoading : Result Http.Error PreviewMovie -> Maybe (List PreviewMovie) -> Int -> Model -> Model
+withInBetweenFeedMovieLoading movieResults maybeMovies count model =
+    case movieResults of
+        Err error ->
+            { model | feed = FeedFailure <| RequestHelpers.toString error }
+
+        Ok movie ->
+            let
+                movies =
+                    movie :: Maybe.withDefault [] maybeMovies
+
+                ids =
+                    Session.favoriteMovies model.session
+
+                findIndexWithDefault item list =
+                    Maybe.withDefault -1 <| findIndex (Movie.id item) list
+
+                sorted =
+                    List.sortWith
+                        (\left right ->
+                            compare
+                                (findIndexWithDefault left ids)
+                                (findIndexWithDefault right ids)
+                        )
+                        movies
+
+                enough =
+                    List.length movies == count
+            in
+            if enough then
+                { model | feed = FeedSuccess <| Feed sorted 1 1 count }
+
+            else
+                { model | feed = FeedLoading (Just sorted) }
 
 
 findIndex : a -> List a -> Maybe Int
