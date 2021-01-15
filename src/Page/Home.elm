@@ -493,7 +493,7 @@ fetchFavoriteMovies model =
             baseUrl ++ "movie/" ++ id ++ "?" ++ query
 
         requests =
-            List.map (\id -> RequestHelpers.fetch (url <| MovieId.toString id) Movie.previewDecoder) ids
+            List.map (\id -> RequestHelpers.fetch (url <| MovieId.toString id) (D.map Movie.toPreview Movie.decoder)) ids
     in
     case requests of
         [] ->
@@ -516,7 +516,7 @@ fetchRecommendations model =
             baseUrl ++ "movie/" ++ id ++ "?" ++ query
 
         requests =
-            List.map (\id -> RequestHelpers.fetch (url <| MovieId.toString id) Movie.previewDecoder) ids
+            List.map (\id -> RequestHelpers.fetch (url <| MovieId.toString id) (D.map Movie.toPreview Movie.decoder)) ids
     in
     case requests of
         [] ->

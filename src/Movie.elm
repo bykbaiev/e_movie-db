@@ -5,6 +5,7 @@ module Movie exposing
     , fetch
     , id
     , previewDecoder
+    , toPreview
     , view
     , viewPreview
     )
@@ -63,7 +64,7 @@ type alias FullExtraInfo =
     { genres : List Genre
     , budget : Int
     , homepage : String
-    , imdbId : Maybe Int
+    , imdbId : Maybe String
     , productionCountries : List String
     , runtime : Int
     , status : String
@@ -87,12 +88,6 @@ view movie favoriteMovies addToFavorites removeFromFavorites =
     let
         (Movie internals (Full genres)) =
             movie
-
-        _ =
-            Debug.log "movie view" movie
-
-        _ =
-            Debug.log "title" internals.title
     in
     div
         []
@@ -232,7 +227,7 @@ viewRemoveFromFavoriteButton movieId toMsg =
 decoder : Decoder (Movie Full)
 decoder =
     D.map2
-        (\internals genres -> Movie internals <| Full genres)
+        (\internals extra -> Movie internals <| Full extra)
         fullInternalsDecoder
         fullExtraInfoDecoder
 
@@ -243,7 +238,7 @@ fullExtraInfoDecoder =
         |> DP.required "genres" (D.list Genre.decoder)
         |> DP.required "budget" D.int
         |> DP.required "homepage" D.string
-        |> DP.required "imdb_id" (D.nullable D.int)
+        |> DP.required "imdb_id" (D.nullable D.string)
         |> DP.required "production_countries" (D.list <| D.field "name" D.string)
         |> DP.required "runtime" D.int
         |> DP.required "status" D.string
@@ -333,3 +328,12 @@ fetch session movieId =
             baseUrl ++ "movie/" ++ MovieId.toString movieId ++ "?" ++ query
     in
     RequestHelpers.fetch url decoder
+
+
+
+-- TRANSFORMATIONS
+
+
+toPreview : FullMovie -> PreviewMovie
+toPreview (Movie internals (Full { genres })) =
+    Movie internals (Preview <| List.map .id genres)
