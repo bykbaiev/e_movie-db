@@ -160,7 +160,6 @@ update msg model =
                 Ok feed ->
                     ( { model | feed = FeedSuccess feed }, Cmd.none )
 
-        -- TODO add handler
         GotInBetweenFeedMovie tab movieResults ->
             if tab == model.tab then
                 ( withInBetweenFeedMovie movieResults model, Cmd.none )
@@ -493,7 +492,9 @@ fetchFavoriteMovies model =
             baseUrl ++ "movie/" ++ id ++ "?" ++ query
 
         requests =
-            List.map (\id -> RequestHelpers.fetch (url <| MovieId.toString id) (D.map Movie.toPreview Movie.decoder)) ids
+            List.map
+                (\id -> RequestHelpers.fetch (url <| MovieId.toString id) (D.map Movie.toPreview Movie.decoder))
+                ids
     in
     case requests of
         [] ->
@@ -560,20 +561,50 @@ withInBetweenFeedMovie movieResults model =
                         movies =
                             movie :: Maybe.withDefault [] maybeMovies
 
+                        ids =
+                            Session.favoriteMovies model.session
+
+                        findIndexWithDefault item list =
+                            Maybe.withDefault -1 <| findIndex (Movie.id item) list
+
+                        sorted =
+                            List.sortWith
+                                (\left right ->
+                                    compare
+                                        (findIndexWithDefault left ids)
+                                        (findIndexWithDefault right ids)
+                                )
+                                movies
+
                         enough =
                             List.length movies == count
                     in
                     if enough then
-                        { model | feed = FeedSuccess { movies = movies, page = 1, totalPages = 1, totalResults = count } }
+                        { model | feed = FeedSuccess <| Feed sorted 1 1 count }
 
                     else
-                        { model | feed = FeedLoading (Just movies) }
+                        { model | feed = FeedLoading (Just sorted) }
 
         FeedSuccess _ ->
             model
 
         FeedFailure _ ->
             model
+
+
+findIndex : a -> List a -> Maybe Int
+findIndex item list =
+    list
+        |> List.indexedMap Tuple.pair
+        |> List.foldr
+            (\( index, i ) accum ->
+                if i == item then
+                    Just index
+
+                else
+                    accum
+            )
+            Nothing
 
 
 
