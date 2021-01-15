@@ -11,8 +11,11 @@ import Css exposing (..)
 import Genre exposing (Genre)
 import Html.Styled exposing (Html, div, text)
 import Html.Styled.Attributes exposing (class, css)
+import Html.Styled.Keyed
+import Html.Styled.Lazy exposing (lazy5)
 import Http
-import Movie exposing (FullMovie)
+import Loader
+import Movie exposing (Feed, FullMovie, PreviewMovie)
 import MovieId exposing (MovieId)
 import Ports exposing (onSessionChange, storeSession)
 import RequestHelpers
@@ -27,14 +30,9 @@ import Task
 
 type Status a
     = Loading
+    | LoadingSlowly
     | Success a
     | Failure String
-
-
-type RecommendationStatus
-    = RecommendationsLoading (Maybe (List FullMovie))
-    | RecommendationsSuccess (List FullMovie)
-    | RecommendationsFailure String
 
 
 
@@ -45,7 +43,7 @@ type alias Model =
     { session : Session
     , id : MovieId
     , details : Status FullMovie
-    , recommendations : RecommendationStatus
+    , recommendations : Status Feed
     , genres : Status (List Genre)
     }
 
@@ -57,7 +55,7 @@ init session id =
             { session = session
             , id = id
             , details = Loading
-            , recommendations = RecommendationsLoading Nothing
+            , recommendations = Loading
             , genres = Loading
             }
     in
@@ -65,6 +63,8 @@ init session id =
     , Cmd.batch
         [ Task.attempt GotGenres <| Genre.fetch session
         , Task.attempt GotDetails <| Movie.fetch session id
+        , Task.attempt GotRecommendations <| Movie.fetchRecommendations session id
+        , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
         ]
     )
 
@@ -86,8 +86,10 @@ type Msg
     = GotSession Session
     | GotDetails (Result Http.Error FullMovie)
     | GotGenres (Result Http.Error (List Genre))
+    | GotRecommendations (Result Http.Error Feed)
     | SelectedFavoriteMovie MovieId
     | RemovedFavoriteMovie MovieId
+    | PassedSlowLoadThreshold
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -126,6 +128,48 @@ update msg model =
             in
             ( model, storeFavorite model.session favoriteMovies )
 
+        GotRecommendations recommendationResults ->
+            case recommendationResults of
+                Err error ->
+                    ( { model | recommendations = Failure <| RequestHelpers.toString error }, Cmd.none )
+
+                Ok recommendations ->
+                    ( { model | recommendations = Success recommendations }, Cmd.none )
+
+        PassedSlowLoadThreshold ->
+            let
+                details =
+                    case model.details of
+                        Loading ->
+                            LoadingSlowly
+
+                        other ->
+                            other
+
+                genres =
+                    case model.genres of
+                        Loading ->
+                            LoadingSlowly
+
+                        other ->
+                            other
+
+                recommendations =
+                    case model.recommendations of
+                        Loading ->
+                            LoadingSlowly
+
+                        other ->
+                            other
+            in
+            ( { model
+                | details = details
+                , recommendations = recommendations
+                , genres = genres
+              }
+            , Cmd.none
+            )
+
 
 storeFavorite : Session -> List MovieId -> Cmd Msg
 storeFavorite session fMovies =
@@ -142,28 +186,20 @@ storeFavorite session fMovies =
 
 view : Model -> StyledDocument Msg
 view model =
-    let
-        _ =
-            case model.details of
-                Loading ->
-                    Debug.log "Loading" model.details
-
-                Success _ ->
-                    Debug.log "Details" model.details
-
-                Failure _ ->
-                    Debug.log "Failed" model.details
-    in
     { title = "Movie " ++ MovieId.toString model.id
     , body =
         [ div
             [ css
-                [ width (px 960)
+                [ position relative
+                , paddingBottom <| px 32
+                , width (px 960)
                 , margin2 zero auto
                 , fontFamilies [ "Helvetica", "Arial", "serif" ]
                 ]
             ]
-            [ viewMovie model ]
+            [ viewMovie model
+            , viewRecommendations model
+            ]
         ]
     }
 
@@ -172,13 +208,56 @@ viewMovie : Model -> Html Msg
 viewMovie model =
     case model.details of
         Loading ->
-            text "Loading"
+            text ""
+
+        LoadingSlowly ->
+            Loader.view
 
         Success movie ->
-            Movie.view movie [] SelectedFavoriteMovie RemovedFavoriteMovie
+            Movie.view movie (Session.favoriteMovies model.session) SelectedFavoriteMovie RemovedFavoriteMovie
 
         Failure err ->
             viewErrorMessage err
+
+
+viewRecommendations : Model -> Html Msg
+viewRecommendations model =
+    case ( model.recommendations, model.genres ) of
+        ( Failure err, _ ) ->
+            viewErrorMessage err
+
+        ( _, Failure err ) ->
+            viewErrorMessage err
+
+        ( LoadingSlowly, _ ) ->
+            Loader.view
+
+        ( _, LoadingSlowly ) ->
+            Loader.view
+
+        ( Loading, _ ) ->
+            text ""
+
+        ( _, Loading ) ->
+            text ""
+
+        ( Success recommendations, Success genres ) ->
+            case recommendations.movies of
+                [] ->
+                    div [] [ text "There are no any recommendations" ]
+
+                movies ->
+                    Html.Styled.Keyed.node
+                        "div"
+                        [ class "results" ]
+                        (List.map (viewKeyedRecommendation genres (Session.favoriteMovies model.session)) <| List.take 3 movies)
+
+
+viewKeyedRecommendation : List Genre -> List MovieId -> PreviewMovie -> ( String, Html Msg )
+viewKeyedRecommendation genres favoriteMovies movie =
+    ( MovieId.toString <| Movie.id movie
+    , lazy5 Movie.viewPreview movie genres favoriteMovies SelectedFavoriteMovie RemovedFavoriteMovie
+    )
 
 
 viewErrorMessage : String -> Html Msg

@@ -1,8 +1,11 @@
 module Movie exposing
-    ( FullMovie
+    ( Feed
+    , FullMovie
     , PreviewMovie
     , decoder
     , fetch
+    , fetchList
+    , fetchRecommendations
     , id
     , previewDecoder
     , toPreview
@@ -79,6 +82,14 @@ type alias FullMovie =
     Movie Full
 
 
+type alias Feed =
+    { movies : List PreviewMovie
+    , page : Int
+    , totalPages : Int
+    , totalResults : Int
+    }
+
+
 
 -- VIEW
 
@@ -86,11 +97,18 @@ type alias FullMovie =
 view : FullMovie -> List MovieId -> (MovieId -> msg) -> (MovieId -> msg) -> Html msg
 view movie favoriteMovies addToFavorites removeFromFavorites =
     let
-        (Movie internals (Full genres)) =
+        (Movie internals (Full { genres })) =
             movie
+
+        isFavorite =
+            List.any (\movieId -> movieId == internals.id) favoriteMovies
     in
     div
-        []
+        [ css
+            [ position relative
+            , paddingBottom <| px 32
+            ]
+        ]
         [ h2
             [ css
                 [ margin2 (px 8) zero
@@ -98,6 +116,38 @@ view movie favoriteMovies addToFavorites removeFromFavorites =
                 ]
             ]
             [ text internals.title ]
+        , Genre.viewList genres
+        , div [ css [ textAlign justify ] ]
+            [ text <| ViewHelpers.truncateText internals.overview ]
+        , div
+            [ css
+                [ displayFlex
+                , justifyContent spaceBetween
+                , alignItems center
+                , position absolute
+                , right zero
+                , bottom zero
+                , left zero
+                ]
+            ]
+            [ div
+                [ css
+                    [ displayFlex
+                    , alignItems center
+                    ]
+                ]
+                [ div
+                    [ css [ marginRight (px 8) ] ]
+                    [ text <| "Rate: " ++ String.fromFloat internals.rate ]
+                , div []
+                    [ text <| "Release date: " ++ mapReleaseDate internals.releaseDate ]
+                ]
+            , if isFavorite then
+                viewRemoveFromFavoriteButton internals.id removeFromFavorites
+
+              else
+                viewAddToFavoriteButton internals.id addToFavorites
+            ]
         ]
 
 
@@ -109,13 +159,6 @@ viewPreview movie genres favoriteMovies addToFavorites removeFromFavorites =
 
         movieGenres =
             List.filter (\genre -> List.member genre.id genreIds) genres
-
-        movieReleaseDate =
-            internals.releaseDate
-                |> toTime
-                |> Result.toMaybe
-                |> Maybe.map (DateFormat.format "dd MMM yyyy" Time.utc)
-                |> Maybe.withDefault "Unknown"
 
         isFavorite =
             List.any (\movieId -> movieId == internals.id) favoriteMovies
@@ -198,7 +241,7 @@ viewPreview movie genres favoriteMovies addToFavorites removeFromFavorites =
                         [ css [ marginRight (px 8) ] ]
                         [ text <| "Rate: " ++ String.fromFloat internals.rate ]
                     , div []
-                        [ text <| "Release date: " ++ movieReleaseDate ]
+                        [ text <| "Release date: " ++ mapReleaseDate internals.releaseDate ]
                     ]
                 , if isFavorite then
                     viewRemoveFromFavoriteButton internals.id removeFromFavorites
@@ -282,6 +325,15 @@ fullInternalsDecoder =
         |> DP.required "adult" D.bool
 
 
+listDecoder : Decoder Feed
+listDecoder =
+    succeed Feed
+        |> DP.required "results" (D.list previewDecoder)
+        |> DP.required "page" D.int
+        |> DP.required "total_pages" D.int
+        |> DP.required "total_results" D.int
+
+
 
 -- GETTERS
 
@@ -330,6 +382,23 @@ fetch session movieId =
     RequestHelpers.fetch url decoder
 
 
+fetchList : String -> Task Http.Error Feed
+fetchList url =
+    RequestHelpers.fetch url listDecoder
+
+
+fetchRecommendations : Session -> MovieId -> Task Http.Error Feed
+fetchRecommendations session movieId =
+    let
+        query =
+            Maybe.withDefault "" <| Session.tokenQueryParam session
+
+        url =
+            baseUrl ++ "movie/" ++ MovieId.toString movieId ++ "/recommendations?" ++ query
+    in
+    fetchList url
+
+
 
 -- TRANSFORMATIONS
 
@@ -337,3 +406,12 @@ fetch session movieId =
 toPreview : FullMovie -> PreviewMovie
 toPreview (Movie internals (Full { genres })) =
     Movie internals (Preview <| List.map .id genres)
+
+
+mapReleaseDate : String -> String
+mapReleaseDate date =
+    date
+        |> toTime
+        |> Result.toMaybe
+        |> Maybe.map (DateFormat.format "dd MMM yyyy" Time.utc)
+        |> Maybe.withDefault "Unknown"

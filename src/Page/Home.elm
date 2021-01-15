@@ -10,20 +10,19 @@ module Page.Home exposing
 import Api exposing (baseUrl)
 import Css exposing (..)
 import Genre exposing (Genre)
-import Html.Styled exposing (Html, button, div, h1, header, input, span, text)
+import Html.Styled exposing (Html, button, div, input, text)
 import Html.Styled.Attributes exposing (class, css, value)
 import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
 import Html.Styled.Keyed
 import Html.Styled.Lazy exposing (lazy, lazy5)
 import Http
-import Json.Decode as D exposing (Decoder, Value, succeed)
-import Json.Decode.Pipeline as DP
+import Json.Decode as D
 import Loader
-import Movie exposing (FullMovie, PreviewMovie)
+import Movie exposing (Feed, PreviewMovie)
 import MovieId exposing (MovieId)
 import Ports exposing (onSessionChange, storeSession)
 import Regex exposing (Options)
-import RequestHelpers exposing (handleJsonResponse)
+import RequestHelpers
 import SearchOptions exposing (updateOptions)
 import Session exposing (Session, favoriteMovies)
 import String
@@ -39,14 +38,6 @@ type Tab
     = Main
     | Favorite
     | Recommendations
-
-
-type alias Feed =
-    { movies : List PreviewMovie
-    , page : Int
-    , totalPages : Int
-    , totalResults : Int
-    }
 
 
 type Status a
@@ -516,7 +507,7 @@ fetchMainFeed model page =
         url =
             baseUrl ++ mainUrl ++ query
     in
-    RequestHelpers.fetch url feedDecoder
+    Movie.fetchList url
 
 
 fetchFavoriteMovies : Model -> Cmd Msg
@@ -565,19 +556,6 @@ fetchRecommendations model =
 
         _ ->
             Cmd.batch (List.map (Task.attempt (GotInBetweenFeedMovie model.tab)) requests)
-
-
-
--- SERIALIZATION
-
-
-feedDecoder : Decoder Feed
-feedDecoder =
-    succeed Feed
-        |> DP.required "results" (D.list Movie.previewDecoder)
-        |> DP.required "page" D.int
-        |> DP.required "total_pages" D.int
-        |> DP.required "total_results" D.int
 
 
 
