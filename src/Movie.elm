@@ -56,7 +56,18 @@ type Preview
 
 
 type Full
-    = Full (List Genre)
+    = Full FullExtraInfo
+
+
+type alias FullExtraInfo =
+    { genres : List Genre
+    , budget : Int
+    , homepage : String
+    , imdbId : Maybe Int
+    , productionCountries : List String
+    , runtime : Int
+    , status : String
+    }
 
 
 type alias PreviewMovie =
@@ -223,7 +234,19 @@ decoder =
     D.map2
         (\internals genres -> Movie internals <| Full genres)
         fullInternalsDecoder
-        (D.field "genres" <| D.list Genre.decoder)
+        fullExtraInfoDecoder
+
+
+fullExtraInfoDecoder : Decoder FullExtraInfo
+fullExtraInfoDecoder =
+    succeed FullExtraInfo
+        |> DP.required "genres" (D.list Genre.decoder)
+        |> DP.required "budget" D.int
+        |> DP.required "homepage" D.string
+        |> DP.required "imdb_id" (D.nullable D.int)
+        |> DP.required "production_countries" (D.list <| D.field "name" D.string)
+        |> DP.required "runtime" D.int
+        |> DP.required "status" D.string
 
 
 previewDecoder : Decoder (Movie Preview)
