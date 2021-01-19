@@ -47,9 +47,15 @@ type Status a
     | Failure String
 
 
+type FeedLoadingPayload
+    = MainFeedLoadingPayload
+    | FavoriteFeedLoadingPayload (List PreviewMovie)
+    | RecommendationsFeedLoadingPayload (List PreviewMovie) Int
+
+
 type FeedStatus
-    = FeedLoading (Maybe (List PreviewMovie))
-    | FeedLoadingSlowly (Maybe (List PreviewMovie))
+    = FeedLoading FeedLoadingPayload
+    | FeedLoadingSlowly FeedLoadingPayload
     | FeedSuccess Feed
     | FeedFailure String
 
@@ -76,7 +82,7 @@ init session =
             , query = ""
             , searchOptions = SearchOptions.initialModel
             , tab = Main
-            , feed = FeedLoading Nothing
+            , feed = FeedLoading MainFeedLoadingPayload
             , genres = Loading
             }
     in
@@ -97,7 +103,8 @@ type Msg
     = ChangedQuery String
     | Search
     | GotFeed (Result Http.Error Feed)
-    | GotInBetweenFeedMovie Tab (Result Http.Error PreviewMovie)
+    | GotInBetweenFeedMovies Tab (Result Http.Error (List PreviewMovie))
+    | PartialSuccess (Model -> ( Model, Cmd Msg ))
     | GotGenres (Result Http.Error (List Genre))
     | Options SearchOptions.Msg
     | ChangedPage Int
@@ -114,7 +121,7 @@ update msg model =
     case msg of
         Search ->
             ( { model
-                | feed = FeedLoading Nothing
+                | feed = FeedLoading MainFeedLoadingPayload
               }
             , Cmd.batch
                 [ fetchFeed model 1
@@ -132,7 +139,7 @@ update msg model =
 
                 updatedModel =
                     if shouldReload then
-                        { model | searchOptions = searchOptions, feed = FeedLoading Nothing }
+                        { model | searchOptions = searchOptions, feed = FeedLoading MainFeedLoadingPayload }
 
                     else
                         { model | searchOptions = searchOptions }
@@ -150,7 +157,7 @@ update msg model =
             ( updatedModel, cmd )
 
         ChangedPage page ->
-            ( { model | feed = FeedLoading Nothing }
+            ( { model | feed = FeedLoading MainFeedLoadingPayload }
             , Cmd.batch
                 [ fetchFeed model page
                 , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
@@ -165,17 +172,20 @@ update msg model =
                 Ok feed ->
                     ( { model | feed = FeedSuccess feed }, Cmd.none )
 
-        GotInBetweenFeedMovie tab movieResults ->
+        GotInBetweenFeedMovies tab movieResults ->
             if tab == model.tab then
-                ( withInBetweenFeedMovie movieResults model, Cmd.none )
+                ( withInBetweenFeedMovies movieResults model, Cmd.none )
 
             else
                 ( model, Cmd.none )
 
+        PartialSuccess updater ->
+            updater model
+
         ChangedTab tab ->
             let
                 updatedModel =
-                    { model | tab = tab, feed = FeedLoading Nothing }
+                    { model | tab = tab, feed = FeedLoading <| getLoadingPayloadForTab tab }
             in
             ( updatedModel
             , Cmd.batch
@@ -240,6 +250,19 @@ storeFavorite session fMovies =
             Session.encode session fMovies
     in
     storeSession sessionValue
+
+
+getLoadingPayloadForTab : Tab -> FeedLoadingPayload
+getLoadingPayloadForTab tab =
+    case tab of
+        Main ->
+            MainFeedLoadingPayload
+
+        Favorite ->
+            FavoriteFeedLoadingPayload []
+
+        Recommendations ->
+            RecommendationsFeedLoadingPayload [] 0
 
 
 
@@ -471,7 +494,7 @@ fetchFeed model page =
             fetchFavoriteMovies model
 
         Recommendations ->
-            fetchRecommendations model
+            fetchRecommendationMovies model
 
 
 fetchMainFeed : Model -> Int -> Task Http.Error Feed
@@ -521,96 +544,135 @@ fetchFavoriteMovies model =
             Task.attempt GotFeed <| Task.succeed (Feed [] 1 1 0)
 
         requests ->
-            Cmd.batch (List.map (Task.attempt (GotInBetweenFeedMovie model.tab)) requests)
+            parallelize (List.map (Task.map List.singleton) requests)
 
 
-fetchRecommendations : Model -> Cmd Msg
-fetchRecommendations model =
+fetchRecommendationMovies : Model -> Cmd Msg
+fetchRecommendationMovies model =
     let
         ids =
             Session.favoriteMovies model.session
     in
-    case List.map (Movie.fetchPreview model.session) ids of
+    case List.map (Movie.fetchRecommendations model.session) ids of
         [] ->
             Task.attempt GotFeed <| Task.succeed (Feed [] 1 1 0)
 
         requests ->
-            Cmd.batch (List.map (Task.attempt (GotInBetweenFeedMovie model.tab)) requests)
+            parallelize (List.map (Task.map .movies) requests)
+
+
+parallelize : List (Task Http.Error (List PreviewMovie)) -> Cmd Msg
+parallelize tasks =
+    Cmd.batch
+        (List.map
+            (Task.attempt
+                (\result ->
+                    case result of
+                        Ok values ->
+                            PartialSuccess
+                                (\model ->
+                                    ( model
+                                    , case model.feed of
+                                        FeedLoading payload ->
+                                            updateLoadingFeed payload values model
+
+                                        FeedLoadingSlowly payload ->
+                                            updateLoadingFeed payload values model
+
+                                        _ ->
+                                            Task.perform (\_ -> NoMsg) <| Task.succeed Nothing
+                                    )
+                                )
+
+                        Err msg ->
+                            GotFeed <| Result.Err msg
+                )
+            )
+            tasks
+        )
+
+
+updateLoadingFeed : FeedLoadingPayload -> List PreviewMovie -> Model -> Cmd Msg
+updateLoadingFeed payload values model =
+    let
+        previousValues =
+            case payload of
+                MainFeedLoadingPayload ->
+                    []
+
+                FavoriteFeedLoadingPayload movies ->
+                    movies
+
+                RecommendationsFeedLoadingPayload movies _ ->
+                    movies
+
+        updatedValues =
+            previousValues ++ values
+
+        count =
+            List.length updatedValues
+
+        favoriteMoviesCount =
+            List.length <| Session.favoriteMovies model.session
+
+        enough =
+            case payload of
+                MainFeedLoadingPayload ->
+                    True
+
+                FavoriteFeedLoadingPayload _ ->
+                    favoriteMoviesCount == count
+
+                RecommendationsFeedLoadingPayload _ batchesCount ->
+                    favoriteMoviesCount == batchesCount + 1
+    in
+    if enough then
+        Task.attempt GotFeed <| Task.succeed <| Feed updatedValues 1 1 count
+
+    else
+        Task.attempt (GotInBetweenFeedMovies model.tab) <| Task.succeed updatedValues
 
 
 
 -- TRANSFORMATION
 
 
-withInBetweenFeedMovie : Result Http.Error PreviewMovie -> Model -> Model
-withInBetweenFeedMovie movieResults model =
-    let
-        count =
-            List.length <| Session.favoriteMovies model.session
-    in
-    case model.feed of
-        FeedLoading maybeMovies ->
-            withInBetweenFeedMovieLoading movieResults maybeMovies count model
-
-        FeedLoadingSlowly maybeMovies ->
-            withInBetweenFeedMovieLoading movieResults maybeMovies count model
-
-        FeedSuccess _ ->
-            model
-
-        FeedFailure _ ->
-            model
-
-
-withInBetweenFeedMovieLoading : Result Http.Error PreviewMovie -> Maybe (List PreviewMovie) -> Int -> Model -> Model
-withInBetweenFeedMovieLoading movieResults maybeMovies count model =
+withInBetweenFeedMovies : Result Http.Error (List PreviewMovie) -> Model -> Model
+withInBetweenFeedMovies movieResults model =
     case movieResults of
         Err error ->
-            { model | feed = FeedFailure <| RequestHelpers.toString error }
+            case model.feed of
+                FeedLoading _ ->
+                    { model | feed = FeedFailure <| RequestHelpers.toString error }
 
-        Ok movie ->
+                FeedLoadingSlowly _ ->
+                    { model | feed = FeedFailure <| RequestHelpers.toString error }
+
+                _ ->
+                    model
+
+        Ok movies ->
             let
-                movies =
-                    movie :: Maybe.withDefault [] maybeMovies
+                getUpdatedPayload payload =
+                    case payload of
+                        MainFeedLoadingPayload ->
+                            MainFeedLoadingPayload
 
-                ids =
-                    Session.favoriteMovies model.session
+                        FavoriteFeedLoadingPayload _ ->
+                            FavoriteFeedLoadingPayload movies
 
-                findIndexWithDefault item list =
-                    Maybe.withDefault -1 <| findIndex (Movie.id item) list
-
-                sorted =
-                    List.sortWith
-                        (\left right ->
-                            compare
-                                (findIndexWithDefault left ids)
-                                (findIndexWithDefault right ids)
-                        )
-                        movies
-
-                enough =
-                    List.length movies == count
+                        RecommendationsFeedLoadingPayload _ count ->
+                            RecommendationsFeedLoadingPayload movies (count + 1)
             in
-            if enough then
-                { model | feed = FeedSuccess <| Feed sorted 1 1 count }
+            case model.feed of
+                FeedLoading payload ->
+                    { model | feed = FeedLoading <| getUpdatedPayload payload }
 
-            else
-                { model | feed = FeedLoading (Just sorted) }
+                FeedLoadingSlowly payload ->
+                    { model | feed = FeedLoadingSlowly <| getUpdatedPayload payload }
 
-
-findIndex : a -> List a -> Maybe Int
-findIndex item list =
-    list
-        |> List.indexedMap Tuple.pair
-        |> List.foldr
-            (\( index, i ) accum ->
-                if i == item then
-                    Just index
-
-                else
-                    accum
-            )
-            Nothing
+                _ ->
+                    model
 
 
 
