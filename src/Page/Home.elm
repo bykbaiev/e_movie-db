@@ -8,7 +8,9 @@ module Page.Home exposing
     )
 
 import Api exposing (baseUrl)
+import Color
 import Css exposing (..)
+import Css.Transitions as Transitions exposing (transition)
 import Genre exposing (Genre)
 import Html.Styled exposing (Html, button, div, input, text)
 import Html.Styled.Attributes exposing (class, css, value)
@@ -18,6 +20,7 @@ import Html.Styled.Lazy exposing (lazy, lazy5)
 import Http
 import Json.Decode as D
 import Loader
+import Material.Icons.Action exposing (search)
 import Movie exposing (Feed, PreviewMovie)
 import MovieId exposing (MovieId)
 import Ports exposing (onSessionChange, storeSession)
@@ -27,6 +30,8 @@ import SearchOptions exposing (updateOptions)
 import Session exposing (Session, favoriteMovies)
 import String
 import StyledDocument exposing (StyledDocument)
+import Svg.Styled exposing (svg)
+import Svg.Styled.Attributes as SvgAttr
 import Task exposing (Task)
 
 
@@ -90,7 +95,7 @@ init session =
     , Cmd.batch
         [ fetchFeed model 1
         , Task.attempt GotGenres <| Genre.fetch session
-        , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
+        , Task.perform (always PassedSlowLoadThreshold) Loader.slowThreshold
         ]
     )
 
@@ -113,6 +118,7 @@ type Msg
     | GotSession Session
     | RemovedFavoriteMovie MovieId
     | PassedSlowLoadThreshold
+    | ClickedSearchBtn
     | NoMsg
 
 
@@ -125,7 +131,7 @@ update msg model =
               }
             , Cmd.batch
                 [ fetchFeed model 1
-                , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
+                , Task.perform (always PassedSlowLoadThreshold) Loader.slowThreshold
                 ]
             )
 
@@ -148,7 +154,7 @@ update msg model =
                     if shouldReload then
                         Cmd.batch
                             [ fetchFeed updatedModel 1
-                            , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
+                            , Task.perform (always PassedSlowLoadThreshold) Loader.slowThreshold
                             ]
 
                     else
@@ -160,7 +166,7 @@ update msg model =
             ( { model | feed = FeedLoading MainFeedLoadingPayload }
             , Cmd.batch
                 [ fetchFeed model page
-                , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
+                , Task.perform (always PassedSlowLoadThreshold) Loader.slowThreshold
                 ]
             )
 
@@ -190,7 +196,7 @@ update msg model =
             ( updatedModel
             , Cmd.batch
                 [ fetchFeed updatedModel 1
-                , Task.perform (\_ -> PassedSlowLoadThreshold) Loader.slowThreshold
+                , Task.perform (always PassedSlowLoadThreshold) Loader.slowThreshold
                 ]
             )
 
@@ -239,6 +245,9 @@ update msg model =
             in
             ( { model | feed = feed, genres = genres }, Cmd.none )
 
+        ClickedSearchBtn ->
+            ( model, Cmd.none )
+
         NoMsg ->
             ( model, Cmd.none )
 
@@ -283,26 +292,55 @@ view model =
             [ input [ class "search-query", onInput ChangedQuery, value <| model.query, onEnter Search ] []
             , button [ class "search-button", onClick Search ] [ text "Search" ]
             , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
-            , viewTab model
+            , viewTabs model
             ]
         ]
     }
 
 
-viewTab : Model -> Html Msg
-viewTab model =
+viewTabs : Model -> Html Msg
+viewTabs model =
     div []
-        [ div [ css [ displayFlex ] ]
-            [ viewTabButton model.tab Main "Top rated"
-            , viewTabButton model.tab Favorite "Favorite"
-            , viewTabButton model.tab Recommendations "Recommendations"
+        [ div
+            [ css
+                [ displayFlex
+                , justifyContent spaceBetween
+                , alignItems center
+                ]
             ]
-        , viewTabData model
+            [ div [ css [ displayFlex ] ]
+                [ viewTabButton model.tab Main "Top rated"
+                , viewTabButton model.tab Favorite "Favorite"
+                , viewTabButton model.tab Recommendations "Recommendations"
+                ]
+            , button
+                [ css
+                    [ border zero
+                    , width <| px 40
+                    , height <| px 40
+                    , borderRadius <| pct 50
+                    , backgroundColor <| hex "fafafa"
+                    , cursor pointer
+                    , textAlign center
+                    , hover [ backgroundColor <| hex "eee", transform (scale 1.2) ]
+                    , transition
+                        [ Transitions.backgroundColor 1000
+                        , Transitions.transform2 500 0
+                        ]
+                    ]
+                , onClick ClickedSearchBtn
+                ]
+                [ svg
+                    [ SvgAttr.width "24", SvgAttr.height "24" ]
+                    [ Svg.Styled.fromUnstyled <| search Color.blue 24 ]
+                ]
+            ]
+        , viewTab model
         ]
 
 
-viewTabData : Model -> Html Msg
-viewTabData model =
+viewTab : Model -> Html Msg
+viewTab model =
     case ( model.feed, model.genres ) of
         ( FeedLoadingSlowly _, _ ) ->
             Loader.view
@@ -580,7 +618,7 @@ parallelize tasks =
                                             updateLoadingFeed payload values model
 
                                         _ ->
-                                            Task.perform (\_ -> NoMsg) <| Task.succeed Nothing
+                                            Task.perform (always NoMsg) <| Task.succeed Nothing
                                     )
                                 )
 
