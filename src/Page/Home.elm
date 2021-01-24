@@ -27,7 +27,6 @@ import MovieId exposing (MovieId)
 import Ports exposing (onSessionChange, storeSession)
 import Regex exposing (Options)
 import RequestHelpers
-import SearchOptions exposing (updateOptions)
 import Session exposing (Session, favoriteMovies)
 import String
 import StyledDocument exposing (StyledDocument)
@@ -45,6 +44,7 @@ type Tab
     = Main
     | Favorite
     | Recommendations
+    | SearchResults
 
 
 type Status a
@@ -56,6 +56,7 @@ type Status a
 
 type FeedLoadingPayload
     = MainFeedLoadingPayload
+    | SearchResultsLoadingPayload
     | FavoriteFeedLoadingPayload (List PreviewMovie)
     | RecommendationsFeedLoadingPayload (List PreviewMovie) Int
 
@@ -74,7 +75,6 @@ type FeedStatus
 type alias Model =
     { session : Session
     , query : String
-    , searchOptions : SearchOptions.Options -- TODO move logic here, make SearchOptions simple module without TEA
     , tab : Tab
     , feed : FeedStatus
     , genres : Status (List Genre)
@@ -88,7 +88,6 @@ init session =
         model =
             { session = session
             , query = ""
-            , searchOptions = SearchOptions.initialModel
             , tab = Main
             , feed = FeedLoading MainFeedLoadingPayload
             , genres = Loading
@@ -116,7 +115,6 @@ type Msg
     | GotInBetweenFeedMovies Tab (Result Http.Error (List PreviewMovie))
     | PartialSuccess (Model -> ( Model, Cmd Msg ))
     | GotGenres (Result Http.Error (List Genre))
-    | Options SearchOptions.Msg
     | ChangedPage Int
     | ChangedTab Tab
     | SelectedFavoriteMovie MovieId
@@ -148,30 +146,6 @@ update msg model =
 
         ClearedSearchQuery ->
             ( { model | query = "" }, Task.perform (always ClosedSearchModal) <| Task.succeed Nothing )
-
-        Options searchOptionsMsg ->
-            let
-                ( searchOptions, shouldReload ) =
-                    updateOptions searchOptionsMsg model.searchOptions
-
-                updatedModel =
-                    if shouldReload then
-                        { model | searchOptions = searchOptions, feed = FeedLoading MainFeedLoadingPayload }
-
-                    else
-                        { model | searchOptions = searchOptions }
-
-                cmd =
-                    if shouldReload then
-                        Cmd.batch
-                            [ fetchFeed updatedModel 1
-                            , Task.perform (always PassedSlowLoadThreshold) Loader.slowThreshold
-                            ]
-
-                    else
-                        Cmd.none
-            in
-            ( updatedModel, cmd )
 
         ChangedPage page ->
             ( { model | feed = FeedLoading MainFeedLoadingPayload }
@@ -287,6 +261,9 @@ getLoadingPayloadForTab tab =
         Recommendations ->
             RecommendationsFeedLoadingPayload [] 0
 
+        SearchResults ->
+            SearchResultsLoadingPayload
+
 
 
 -- VIEW
@@ -318,7 +295,6 @@ view model =
                 ]
                 [ input [ class "search-query", onInput ChangedQuery, value <| model.query, onEnter Search ] []
                 , button [ class "search-button", onClick Search ] [ text "Search" ]
-                , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
                 , viewTabs model
                 ]
             ]
@@ -584,20 +560,39 @@ fetchFeed model page =
         Recommendations ->
             fetchRecommendationMovies model
 
+        SearchResults ->
+            Task.attempt GotFeed <| searchMovies model page
+
 
 fetchMainFeed : Model -> Int -> Task Http.Error Feed
 fetchMainFeed model page =
     let
-        { session, searchOptions } =
-            model
-
         queries =
             List.filter
                 ((/=) Nothing)
-                [ SearchOptions.regionQueryParam searchOptions
-                , SearchOptions.adultQueryParam searchOptions
-                , SearchOptions.languageQueryParam searchOptions
-                , Session.tokenQueryParam session
+                [ Session.tokenQueryParam model.session
+                , Just ("page=" ++ String.fromInt page)
+                ]
+
+        query =
+            queries
+                |> List.map (Maybe.withDefault "")
+                |> List.intersperse "&"
+                |> List.foldr (++) ""
+
+        url =
+            baseUrl ++ "movie/top_rated?" ++ query
+    in
+    Movie.fetchList url
+
+
+searchMovies : Model -> Int -> Task Http.Error Feed
+searchMovies model page =
+    let
+        queries =
+            List.filter
+                ((/=) Nothing)
+                [ Session.tokenQueryParam model.session
                 , Just ("query=" ++ model.query)
                 , Just ("page=" ++ String.fromInt page)
                 ]
@@ -608,15 +603,8 @@ fetchMainFeed model page =
                 |> List.intersperse "&"
                 |> List.foldr (++) ""
 
-        mainUrl =
-            if model.query == "" then
-                "movie/top_rated?"
-
-            else
-                "search/movie?"
-
         url =
-            baseUrl ++ mainUrl ++ query
+            baseUrl ++ "search/movie?" ++ query
     in
     Movie.fetchList url
 
@@ -694,6 +682,9 @@ updateLoadingFeed payload values model =
                 RecommendationsFeedLoadingPayload movies _ ->
                     movies
 
+                SearchResultsLoadingPayload ->
+                    []
+
         updatedValues =
             previousValues ++ values
 
@@ -713,6 +704,9 @@ updateLoadingFeed payload values model =
 
                 RecommendationsFeedLoadingPayload _ batchesCount ->
                     favoriteMoviesCount == batchesCount + 1
+
+                SearchResultsLoadingPayload ->
+                    True
     in
     if enough then
         Task.attempt GotFeed <| Task.succeed <| Feed updatedValues 1 1 count
@@ -751,6 +745,9 @@ withInBetweenFeedMovies movieResults model =
 
                         RecommendationsFeedLoadingPayload _ count ->
                             RecommendationsFeedLoadingPayload movies (count + 1)
+
+                        SearchResultsLoadingPayload ->
+                            SearchResultsLoadingPayload
             in
             case model.feed of
                 FeedLoading payload ->
