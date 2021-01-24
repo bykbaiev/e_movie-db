@@ -12,7 +12,7 @@ import Color
 import Css exposing (..)
 import Css.Transitions as Transitions exposing (transition)
 import Genre exposing (Genre)
-import Html.Styled exposing (Html, button, div, input, text)
+import Html.Styled exposing (Html, a, button, div, input, text)
 import Html.Styled.Attributes exposing (class, css, value)
 import Html.Styled.Events exposing (keyCode, on, onClick, onInput)
 import Html.Styled.Keyed
@@ -21,6 +21,7 @@ import Http
 import Json.Decode as D
 import Loader
 import Material.Icons.Action exposing (search)
+import Material.Icons.Navigation exposing (close)
 import Movie exposing (Feed, PreviewMovie)
 import MovieId exposing (MovieId)
 import Ports exposing (onSessionChange, storeSession)
@@ -33,6 +34,7 @@ import StyledDocument exposing (StyledDocument)
 import Svg.Styled exposing (svg)
 import Svg.Styled.Attributes as SvgAttr
 import Task exposing (Task)
+import UI.IconButton exposing (iconButton)
 
 
 
@@ -76,6 +78,7 @@ type alias Model =
     , tab : Tab
     , feed : FeedStatus
     , genres : Status (List Genre)
+    , searchModalOpened : Bool
     }
 
 
@@ -89,6 +92,7 @@ init session =
             , tab = Main
             , feed = FeedLoading MainFeedLoadingPayload
             , genres = Loading
+            , searchModalOpened = False
             }
     in
     ( model
@@ -106,6 +110,7 @@ init session =
 
 type Msg
     = ChangedQuery String
+    | ClearedSearchQuery
     | Search
     | GotFeed (Result Http.Error Feed)
     | GotInBetweenFeedMovies Tab (Result Http.Error (List PreviewMovie))
@@ -118,7 +123,8 @@ type Msg
     | GotSession Session
     | RemovedFavoriteMovie MovieId
     | PassedSlowLoadThreshold
-    | ClickedSearchBtn
+    | OpenedSearchModal
+    | ClosedSearchModal
     | NoMsg
 
 
@@ -127,16 +133,21 @@ update msg model =
     case msg of
         Search ->
             ( { model
-                | feed = FeedLoading MainFeedLoadingPayload
+                | query = ""
+                , feed = FeedLoading MainFeedLoadingPayload
               }
             , Cmd.batch
-                [ fetchFeed model 1
+                [ Task.perform (always ClosedSearchModal) <| Task.succeed Nothing
+                , fetchFeed model 1
                 , Task.perform (always PassedSlowLoadThreshold) Loader.slowThreshold
                 ]
             )
 
         ChangedQuery query ->
             ( { model | query = query }, Cmd.none )
+
+        ClearedSearchQuery ->
+            ( { model | query = "" }, Task.perform (always ClosedSearchModal) <| Task.succeed Nothing )
 
         Options searchOptionsMsg ->
             let
@@ -245,8 +256,11 @@ update msg model =
             in
             ( { model | feed = feed, genres = genres }, Cmd.none )
 
-        ClickedSearchBtn ->
-            ( model, Cmd.none )
+        OpenedSearchModal ->
+            ( { model | searchModalOpened = True }, Cmd.none )
+
+        ClosedSearchModal ->
+            ( { model | searchModalOpened = False }, Cmd.none )
 
         NoMsg ->
             ( model, Cmd.none )
@@ -283,19 +297,75 @@ view model =
     { title = "Home page - MovieDB"
     , body =
         [ div
-            [ css
-                [ width (px 960)
-                , margin2 zero auto
-                , fontFamilies [ "Helvetica", "Arial", "serif" ]
-                ]
+            [ css <|
+                if model.searchModalOpened then
+                    [ overflow hidden, height <| calc (vh 100) minus (px 200) ]
+
+                else
+                    []
             ]
-            [ input [ class "search-query", onInput ChangedQuery, value <| model.query, onEnter Search ] []
-            , button [ class "search-button", onClick Search ] [ text "Search" ]
-            , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
-            , viewTabs model
+            [ if model.searchModalOpened then
+                viewSearchModal model
+
+              else
+                text ""
+            , div
+                [ css
+                    [ width (px 960)
+                    , margin2 zero auto
+                    , fontFamilies [ "Helvetica", "Arial", "serif" ]
+                    ]
+                ]
+                [ input [ class "search-query", onInput ChangedQuery, value <| model.query, onEnter Search ] []
+                , button [ class "search-button", onClick Search ] [ text "Search" ]
+                , Html.Styled.map Options (lazy SearchOptions.view model.searchOptions)
+                , viewTabs model
+                ]
             ]
         ]
     }
+
+
+viewSearchModal : Model -> Html Msg
+viewSearchModal model =
+    div
+        [ css
+            [ position fixed
+            , top zero
+            , right zero
+            , bottom zero
+            , left zero
+            , backgroundColor <| rgba 255 255 255 0.9
+            , height <| pct 100
+            , zIndex <| int 1
+            ]
+        ]
+        [ iconButton
+            (Just
+                [ position absolute
+                , top <| px 16
+                , right <| px 16
+                , backgroundColor transparent
+                ]
+            )
+            ClosedSearchModal
+            24
+            (close Color.blue 24)
+        , input
+            [ css
+                [ position absolute
+                , top <| pct 50
+                , left <| pct 50
+                , fontSize <| px 24
+                , transform <| translate <| pct -50
+                ]
+            , onInput ChangedQuery
+            , onEsc ClearedSearchQuery
+            , value <| model.query
+            , onEnter Search
+            ]
+            []
+        ]
 
 
 viewTabs : Model -> Html Msg
@@ -313,27 +383,7 @@ viewTabs model =
                 , viewTabButton model.tab Favorite "Favorite"
                 , viewTabButton model.tab Recommendations "Recommendations"
                 ]
-            , button
-                [ css
-                    [ border zero
-                    , width <| px 40
-                    , height <| px 40
-                    , borderRadius <| pct 50
-                    , backgroundColor <| hex "fafafa"
-                    , cursor pointer
-                    , textAlign center
-                    , hover [ backgroundColor <| hex "eee", transform (scale 1.2) ]
-                    , transition
-                        [ Transitions.backgroundColor 1000
-                        , Transitions.transform2 500 0
-                        ]
-                    ]
-                , onClick ClickedSearchBtn
-                ]
-                [ svg
-                    [ SvgAttr.width "24", SvgAttr.height "24" ]
-                    [ Svg.Styled.fromUnstyled <| search Color.blue 24 ]
-                ]
+            , iconButton Nothing OpenedSearchModal 24 <| search Color.blue 24
             ]
         , viewTab model
         ]
@@ -718,16 +768,26 @@ withInBetweenFeedMovies movieResults model =
 
 
 onEnter : Msg -> Html.Styled.Attribute Msg
-onEnter msg =
+onEnter =
+    onKeyPress 13
+
+
+onEsc : Msg -> Html.Styled.Attribute Msg
+onEsc =
+    onKeyPress 27
+
+
+onKeyPress : Int -> Msg -> Html.Styled.Attribute Msg
+onKeyPress code msg =
     let
-        isEnter code =
-            if code == 13 then
+        isKey c =
+            if c == code then
                 D.succeed msg
 
             else
                 D.fail "not ENTER"
     in
-    on "keydown" (D.andThen isEnter keyCode)
+    on "keydown" (D.andThen isKey keyCode)
 
 
 
