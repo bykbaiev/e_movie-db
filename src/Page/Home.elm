@@ -78,7 +78,6 @@ type alias Model =
     , tab : Tab
     , feed : FeedStatus
     , genres : Status (List Genre)
-    , searchModalOpened : Bool
     }
 
 
@@ -91,7 +90,6 @@ init session =
             , tab = Main
             , feed = FeedLoading MainFeedLoadingPayload
             , genres = Loading
-            , searchModalOpened = False
             }
     in
     ( model
@@ -121,8 +119,6 @@ type Msg
     | GotSession Session
     | RemovedFavoriteMovie MovieId
     | PassedSlowLoadThreshold
-    | OpenedSearchModal
-    | ClosedSearchModal
     | NoMsg
 
 
@@ -130,25 +126,30 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Search ->
-            ( { model
-                | query = ""
-                , feed = FeedLoading MainFeedLoadingPayload
-              }
-            , Cmd.batch
-                [ Task.perform (always ClosedSearchModal) <| Task.succeed Nothing
-                , fetchFeed model 1
-                , Task.perform (always PassedSlowLoadThreshold) Loader.slowThreshold
-                ]
-            )
+            if model.query == "" then
+                ( model, Task.perform (always <| ChangedTab Main) <| Task.succeed Nothing )
+
+            else if model.tab == SearchResults then
+                ( { model
+                    | feed = FeedLoading SearchResultsLoadingPayload
+                  }
+                , Cmd.batch
+                    [ fetchFeed model 1
+                    , Task.perform (always PassedSlowLoadThreshold) Loader.slowThreshold
+                    ]
+                )
+
+            else
+                ( model, Task.perform (always <| ChangedTab SearchResults) <| Task.succeed Nothing )
 
         ChangedQuery query ->
             ( { model | query = query }, Cmd.none )
 
         ClearedSearchQuery ->
-            ( { model | query = "" }, Task.perform (always ClosedSearchModal) <| Task.succeed Nothing )
+            ( { model | query = "" }, Cmd.none )
 
         ChangedPage page ->
-            ( { model | feed = FeedLoading MainFeedLoadingPayload }
+            ( { model | feed = FeedLoading <| getLoadingPayloadForTab model.tab }
             , Cmd.batch
                 [ fetchFeed model page
                 , Task.perform (always PassedSlowLoadThreshold) Loader.slowThreshold
@@ -176,7 +177,16 @@ update msg model =
         ChangedTab tab ->
             let
                 updatedModel =
-                    { model | tab = tab, feed = FeedLoading <| getLoadingPayloadForTab tab }
+                    { model
+                        | tab = tab
+                        , feed = FeedLoading <| getLoadingPayloadForTab tab
+                        , query =
+                            if tab == SearchResults then
+                                model.query
+
+                            else
+                                ""
+                    }
             in
             ( updatedModel
             , Cmd.batch
@@ -230,12 +240,6 @@ update msg model =
             in
             ( { model | feed = feed, genres = genres }, Cmd.none )
 
-        OpenedSearchModal ->
-            ( { model | searchModalOpened = True }, Cmd.none )
-
-        ClosedSearchModal ->
-            ( { model | searchModalOpened = False }, Cmd.none )
-
         NoMsg ->
             ( model, Cmd.none )
 
@@ -273,20 +277,8 @@ view : Model -> StyledDocument Msg
 view model =
     { title = "Home page - MovieDB"
     , body =
-        [ div
-            [ css <|
-                if model.searchModalOpened then
-                    [ overflow hidden, height <| calc (vh 100) minus (px 200) ]
-
-                else
-                    []
-            ]
-            [ if model.searchModalOpened then
-                viewSearchModal model
-
-              else
-                text ""
-            , div
+        [ div []
+            [ div
                 [ css
                     [ width (px 960)
                     , margin2 zero auto
@@ -300,48 +292,6 @@ view model =
             ]
         ]
     }
-
-
-viewSearchModal : Model -> Html Msg
-viewSearchModal model =
-    div
-        [ css
-            [ position fixed
-            , top zero
-            , right zero
-            , bottom zero
-            , left zero
-            , backgroundColor <| rgba 255 255 255 0.9
-            , height <| pct 100
-            , zIndex <| int 1
-            ]
-        ]
-        [ iconButton
-            (Just
-                [ position absolute
-                , top <| px 16
-                , right <| px 16
-                , backgroundColor transparent
-                ]
-            )
-            ClosedSearchModal
-            24
-            (close Color.blue 24)
-        , input
-            [ css
-                [ position absolute
-                , top <| pct 50
-                , left <| pct 50
-                , fontSize <| px 24
-                , transform <| translate <| pct -50
-                ]
-            , onInput ChangedQuery
-            , onEsc ClearedSearchQuery
-            , value <| model.query
-            , onEnter Search
-            ]
-            []
-        ]
 
 
 viewTabs : Model -> Html Msg
@@ -358,8 +308,12 @@ viewTabs model =
                 [ viewTabButton model.tab Main "Top rated"
                 , viewTabButton model.tab Favorite "Favorite"
                 , viewTabButton model.tab Recommendations "Recommendations"
+                , if model.tab == SearchResults then
+                    viewTabButton model.tab SearchResults <| "Search: " ++ model.query
+
+                  else
+                    text ""
                 ]
-            , iconButton Nothing OpenedSearchModal 24 <| search Color.blue 24
             ]
         , viewTab model
         ]
@@ -767,11 +721,6 @@ withInBetweenFeedMovies movieResults model =
 onEnter : Msg -> Html.Styled.Attribute Msg
 onEnter =
     onKeyPress 13
-
-
-onEsc : Msg -> Html.Styled.Attribute Msg
-onEsc =
-    onKeyPress 27
 
 
 onKeyPress : Int -> Msg -> Html.Styled.Attribute Msg
