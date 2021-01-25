@@ -354,7 +354,7 @@ poster (Movie internals _) =
             mapSrc internals.backdropPath
 
         defaultImg =
-            ""
+            "/assets/images/no-poster.jpg"
     in
     [ moviePoster, backdrop, defaultImg ]
         |> List.filter (\src -> src /= "")
