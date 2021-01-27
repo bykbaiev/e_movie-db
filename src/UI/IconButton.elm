@@ -18,10 +18,10 @@ iconButton maybeStyle msg size icon =
             , width <| px 40
             , height <| px 40
             , borderRadius <| pct 50
-            , backgroundColor <| hex "fafafa"
+            , backgroundColor <| hex "eee"
             , cursor pointer
             , textAlign center
-            , hover [ backgroundColor <| hex "eee", transform (scale 1.2) ]
+            , hover [ backgroundColor <| hex "ddd", transform (scale 1.2) ]
             , transition
                 [ Transitions.backgroundColor 1000
                 , Transitions.transform2 500 0

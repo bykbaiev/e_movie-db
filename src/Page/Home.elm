@@ -20,11 +20,11 @@ import Html.Styled.Lazy exposing (lazy, lazy5)
 import Http
 import Json.Decode as D
 import Loader
-import Material.Icons.Action exposing (search)
+import Material.Icons.Hardware exposing (keyboard_arrow_up)
 import Material.Icons.Navigation exposing (close)
 import Movie exposing (Feed, PreviewMovie)
 import MovieId exposing (MovieId)
-import Ports exposing (onSessionChange, storeSession)
+import Ports exposing (onScroll, onSessionChange, scrollTop, storeSession)
 import Regex exposing (Options)
 import RequestHelpers
 import Session exposing (Session, favoriteMovies)
@@ -78,6 +78,7 @@ type alias Model =
     , tab : Tab
     , feed : FeedStatus
     , genres : Status (List Genre)
+    , scrollY : Int
     }
 
 
@@ -90,6 +91,7 @@ init session =
             , tab = Main
             , feed = FeedLoading MainFeedLoadingPayload
             , genres = Loading
+            , scrollY = 0
             }
     in
     ( model
@@ -119,6 +121,8 @@ type Msg
     | GotSession Session
     | RemovedFavoriteMovie MovieId
     | PassedSlowLoadThreshold
+    | ScrollTop
+    | Scrolled Int
     | NoMsg
 
 
@@ -239,6 +243,12 @@ update msg model =
                             other
             in
             ( { model | feed = feed, genres = genres }, Cmd.none )
+
+        Scrolled scrollY ->
+            ( { model | scrollY = scrollY }, Cmd.none )
+
+        ScrollTop ->
+            ( model, scrollTop () )
 
         NoMsg ->
             ( model, Cmd.none )
@@ -382,6 +392,15 @@ viewFeed model =
                         [ class "results" ]
                         (List.map (viewKeyedSearchResult genresData (Session.favoriteMovies model.session)) feedData.movies)
                     , lazy viewPagination { page = feedData.page, total = feedData.totalPages }
+                    , if model.scrollY > minScrollYToShowScrollTop then
+                        iconButton
+                            (Just [ position fixed, bottom <| px 24, left <| px 24 ])
+                            ScrollTop
+                            24
+                            (keyboard_arrow_up Color.darkGray 24)
+
+                      else
+                        text ""
                     ]
 
         ( _, _ ) ->
@@ -495,7 +514,10 @@ viewPaginationSpace =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    onSessionChange (GotSession << Session.updateWithStoredItems model.session)
+    Sub.batch
+        [ onSessionChange (GotSession << Session.updateWithStoredItems model.session)
+        , onScroll Scrolled
+        ]
 
 
 
@@ -734,6 +756,15 @@ onKeyPress code msg =
                 D.fail "not ENTER"
     in
     on "keydown" (D.andThen isKey keyCode)
+
+
+
+-- CONSTANTS
+
+
+minScrollYToShowScrollTop : Int
+minScrollYToShowScrollTop =
+    250
 
 
 

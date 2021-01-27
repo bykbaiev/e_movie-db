@@ -1,5 +1,21 @@
 require('./index.html');
 
+const debounce = (callback, wait, immediate = false) => {
+    let timeout = null;
+    
+    return (...args) => {
+      const callNow = immediate && !timeout;
+      const next = () => callback(...args);
+      
+      clearTimeout(timeout)
+      timeout = setTimeout(next, wait);
+  
+      if (callNow) {
+        next();
+      }
+    }
+  }
+
 const Elm = require('./Main.elm').Elm;
 
 const KEY = {
@@ -39,6 +55,14 @@ app.ports.storeSession.subscribe(session => {
     setTimeout(() => app.ports.onSessionChange.send(session), 0);
 });
 
+app.ports.scrollTop.subscribe(() => {
+    window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'smooth'
+    });
+});
+
 window.addEventListener('storage', (event) => {
     const { key, newValue } = event;
 
@@ -46,3 +70,5 @@ window.addEventListener('storage', (event) => {
         app.ports.onSessionChange.send(JSON.parse(newValue));
     }
 });
+
+window.addEventListener('scroll', debounce(() => app.ports.onScroll.send(window.scrollY), 300));
