@@ -12,14 +12,15 @@ module Movie exposing
     , toPreview
     , view
     , viewPreview
+    , viewSmallPreview
     )
 
 import Api exposing (baseUrl)
 import Css exposing (..)
 import DateFormat
 import Genre exposing (Genre)
-import Html.Styled exposing (Html, a, button, div, h2, img, p, text)
-import Html.Styled.Attributes exposing (css, href, src)
+import Html.Styled exposing (Html, a, button, div, h2, h3, img, p, text)
+import Html.Styled.Attributes exposing (css, src)
 import Html.Styled.Events exposing (onClick)
 import Http
 import Iso8601 exposing (toTime)
@@ -251,6 +252,47 @@ viewPreview movie genres favoriteMovies addToFavorites removeFromFavorites =
                     viewAddToFavoriteButton internals.id addToFavorites
                 ]
             ]
+        ]
+
+
+viewSmallPreview : PreviewMovie -> List Genre -> Maybe (List Style) -> Html msg
+viewSmallPreview movie genres maybeStyles =
+    let
+        (Movie internals (Preview genreIds)) =
+            movie
+
+        movieGenres =
+            List.filter (\genre -> List.member genre.id genreIds) genres
+    in
+    a
+        [ Route.href <| Route.Movie <| id movie
+        , css <|
+            [ display block
+            , border3 (px 1) solid (hex "999")
+            , padding <| px 8
+            , cursor pointer
+            , hover [ textDecoration none ]
+            ] ++ Maybe.withDefault [] maybeStyles
+        ]
+        [ img
+            [ src <| poster movie
+            , css
+                [ display block
+                , margin4 zero auto (px 8) auto
+                , height (px 300)
+                ]
+            ]
+            []
+        , h3
+            [ css
+                [ display block
+                , margin2 (px 8) zero
+                , fontSize (px 18)
+                , textAlign center
+                ]
+            ]
+            [ text internals.title ]
+        , Genre.viewList movieGenres
         ]
 
 

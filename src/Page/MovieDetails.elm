@@ -9,10 +9,10 @@ module Page.MovieDetails exposing
 
 import Css exposing (..)
 import Genre exposing (Genre)
-import Html.Styled exposing (Html, div, text)
+import Html.Styled exposing (Html, div, h2, text)
 import Html.Styled.Attributes exposing (class, css)
 import Html.Styled.Keyed
-import Html.Styled.Lazy exposing (lazy5)
+import Html.Styled.Lazy exposing (lazy3)
 import Http
 import Loader
 import Movie exposing (Feed, FullMovie, PreviewMovie)
@@ -22,6 +22,7 @@ import RequestHelpers
 import Session exposing (Session)
 import StyledDocument exposing (StyledDocument)
 import Task
+import UI.Slider as Slider
 
 
 
@@ -242,21 +243,41 @@ viewRecommendations model =
             text ""
 
         ( Success recommendations, Success genres ) ->
+            let
+                header =
+                    h2
+                        [ css
+                            [ textAlign center
+                            , fontSize <| px 16
+                            , margin2 (px 16) zero
+                            ]
+                        ]
+                        [ text "Recommendations" ]
+            in
             case recommendations.movies of
                 [] ->
-                    div [] [ text "There are no any recommendations" ]
+                    div [] [ header, text "There are no any recommendations" ]
 
                 movies ->
-                    Html.Styled.Keyed.node
-                        "div"
-                        [ class "results" ]
-                        (List.map (viewKeyedRecommendation genres (Session.favoriteMovies model.session)) <| List.take 3 movies)
+                    div []
+                        [ header
+                        , Html.Styled.Keyed.node
+                            "div"
+                            [ css
+                                [ displayFlex
+                                , justifyContent center
+                                , alignItems center
+                                ]
+                            ]
+                            (List.map (viewKeyedRecommendation genres) <| List.take 3 movies)
+                        , Slider.view <| List.map (viewKeyedRecommendation genres) <| List.take 3 movies
+                        ]
 
 
-viewKeyedRecommendation : List Genre -> List MovieId -> PreviewMovie -> ( String, Html Msg )
-viewKeyedRecommendation genres favoriteMovies movie =
+viewKeyedRecommendation : List Genre -> PreviewMovie -> ( String, Html Msg )
+viewKeyedRecommendation genres movie =
     ( MovieId.toString <| Movie.id movie
-    , lazy5 Movie.viewPreview movie genres favoriteMovies SelectedFavoriteMovie RemovedFavoriteMovie
+    , lazy3 Movie.viewSmallPreview movie genres (Just [ margin2 zero (px 16) ])
     )
 
 
